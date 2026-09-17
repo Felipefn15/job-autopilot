@@ -1,0 +1,12 @@
+[Unit]
+Description=LinkedIn Job Automation Engine
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=__SERVICE_USER__
+WorkingDirectory=__APP_DIR__
+ExecStart=/usr/bin/docker compose run --rm job-automation
+TimeoutStartSec=4h

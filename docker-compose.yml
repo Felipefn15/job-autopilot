@@ -1,0 +1,40 @@
+services:
+  job-automation:
+    build:
+      context: .
+    env_file:
+      - .env
+    environment:
+      DATA_DIR: /data
+      BROWSER_PROFILE_DIR: /data/playwright_profile
+      DATABASE_PATH: jobs.db
+      LOG_DIR: logs
+      RESULTS_PATH: /data/application_results.json
+      BROWSER_HEADLESS: "false"
+      DISPLAY: ":99"
+      ENABLE_VNC: "false"
+    volumes:
+      - ./runtime-data:/data
+    shm_size: "2gb"
+    command: ["/app/scripts/deploy_run.sh"]
+
+  session-setup:
+    build:
+      context: .
+    env_file:
+      - .env
+    environment:
+      DATA_DIR: /data
+      BROWSER_PROFILE_DIR: /data/playwright_profile
+      DATABASE_PATH: jobs.db
+      LOG_DIR: logs
+      BROWSER_HEADLESS: "false"
+      DISPLAY: ":99"
+      ENABLE_VNC: "true"
+    volumes:
+      - ./runtime-data:/data
+    shm_size: "2gb"
+    ports:
+      - "127.0.0.1:6080:6080"
+    command: ["python", "scripts/linkedin_session_setup.py"]
+

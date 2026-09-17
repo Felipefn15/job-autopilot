@@ -1,0 +1,13 @@
+[Unit]
+Description=Run LinkedIn Job Automation twice daily
+
+[Timer]
+OnCalendar=*-*-* 12:00:00 UTC
+OnCalendar=*-*-* 20:00:00 UTC
+Persistent=true
+RandomizedDelaySec=300
+Unit=job-automation.service
+
+[Install]
+WantedBy=timers.target
+
