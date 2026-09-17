@@ -66,3 +66,12 @@ playwright_profile/*
 runtime-data/
 deployment.env
 
+# Cloud application and private documents
+node_modules/
+.wrangler/
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+*.pdf
+do_not_contact.txt
+

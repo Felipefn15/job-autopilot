@@ -1,0 +1,8 @@
+# Generate a long random value, then set the production secret through Wrangler.
+APP_TOKEN=
+GEMINI_API_KEY=
+# Optional email channel: Gmail OAuth with gmail.send permission.
+GMAIL_CLIENT_ID=
+GMAIL_CLIENT_SECRET=
+GMAIL_REFRESH_TOKEN=
+GMAIL_FROM=
