@@ -14,7 +14,7 @@
     {
       "binding": "DB",
       "database_name": "job-autopilot",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "760bc391-0533-4b7a-a9f1-117c54cfec74",
       "migrations_dir": "migrations",
     },
   ],
