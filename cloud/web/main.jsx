@@ -53,8 +53,10 @@ function App() {
       await fn();
       await refresh();
       if (message) setNotice(message);
+      return true;
     } catch (e) {
       setError(e.message);
+      return false;
     } finally {
       setBusy(false);
     }
@@ -465,7 +467,81 @@ function Analysis({ value: a }) {
     </>
   );
 }
+function ResumeProgress({ upload }) {
+  const { stage, filename } = upload;
+  const failed = stage === -1;
+  const done = stage === 3;
+  const steps = [
+    "Validar arquivo PDF",
+    "Enviar e analisar currículo",
+    "Carregar dados para revisão",
+  ];
+  return (
+    <section
+      className={`resume-progress ${failed ? "failed" : done ? "complete" : ""}`}
+      aria-label="Processamento do currículo"
+      aria-busy={!failed && !done}
+    >
+      <div className="resume-progress-heading">
+        <span
+          className={`resume-progress-icon ${!failed && !done ? "spinning" : ""}`}
+          aria-hidden="true"
+        >
+          {failed ? "!" : done ? "✓" : ""}
+        </span>
+        <div role="status" aria-live="polite">
+          <h3>
+            {failed
+              ? "Não foi possível concluir"
+              : done
+                ? "Currículo pronto para revisão"
+                : "Preparando seu currículo"}
+          </h3>
+          <p>
+            {failed
+              ? "Confira a mensagem de erro e tente novamente."
+              : done
+                ? "Revise os dados abaixo e confirme seu perfil."
+                : steps[stage] + "…"}
+          </p>
+        </div>
+      </div>
+      <p className="resume-progress-file">{filename}</p>
+      {!failed && (
+        <ol className="resume-progress-steps">
+          {steps.map((label, index) => (
+            <li
+              key={label}
+              className={
+                index < stage ? "done" : index === stage ? "current" : "pending"
+              }
+              aria-current={index === stage ? "step" : undefined}
+            >
+              <span aria-hidden="true">{index < stage ? "✓" : index + 1}</span>
+              <div>
+                {label}
+                <small>
+                  {index < stage
+                    ? "Concluído"
+                    : index === stage
+                      ? "Em andamento"
+                      : "Aguardando"}
+                </small>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+      {!done && !failed && (
+        <p className="resume-progress-note">
+          A análise pode levar alguns instantes. Mantenha esta página aberta.
+        </p>
+      )}
+    </section>
+  );
+}
 function Profile({ data, api, act, busy }) {
+  const [upload, setUpload] = useState(null);
   const [config, setConfig] = useState(data.config),
     [fields, setFields] = useState(data.profile?.data.fields || {}),
     [text, setText] = useState(data.profile?.data.text || "");
@@ -480,15 +556,24 @@ function Profile({ data, api, act, busy }) {
         <h2>Seu currículo</h2>
         <p>PDF de até 1 MB. Você revisa a extração antes de usar o perfil.</p>
         <form
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
             const file = e.target.elements.pdf.files[0];
-            const f = new FormData();
-            f.append("file", file);
-            act(
-              () => api("resume", "POST", f),
-              "PDF processado. Revise e confirme os dados.",
-            );
+            if (!file || busy) return;
+            setUpload({ stage: 0, filename: file.name });
+            const success = await act(async () => {
+              if (file.size > 1024 * 1024)
+                throw Error("Escolha um PDF de até 1 MB.");
+              const signature = await file.slice(0, 5).text();
+              if (signature !== "%PDF-")
+                throw Error("O arquivo selecionado não é um PDF válido.");
+              const f = new FormData();
+              f.append("file", file);
+              setUpload({ stage: 1, filename: file.name });
+              await api("resume", "POST", f);
+              setUpload({ stage: 2, filename: file.name });
+            }, "PDF processado. Revise e confirme os dados.");
+            setUpload({ stage: success ? 3 : -1, filename: file.name });
           }}
         >
           <input
@@ -497,12 +582,17 @@ function Profile({ data, api, act, busy }) {
             type="file"
             accept="application/pdf"
             required
+            disabled={busy}
+            onChange={() => setUpload(null)}
           />
           <button disabled={busy || !data.capabilities.ai}>
-            Processar PDF
+            {upload && upload.stage >= 0 && upload.stage < 3
+              ? "Processando currículo…"
+              : "Processar PDF"}
           </button>
         </form>
-        {data.profile && (
+        {upload && <ResumeProgress upload={upload} />}
+        {data.profile && !(upload && upload.stage >= 0 && upload.stage < 3) && (
           <>
             <p className="filename">
               {data.profile.filename} ·{" "}

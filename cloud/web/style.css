@@ -685,3 +685,114 @@ footer {
     width: auto;
   }
 }
+.resume-progress {
+  margin: 24px 0;
+  padding: 24px;
+  border: 1px solid #91d4c5;
+  border-radius: 16px;
+  background: #f0faf7;
+}
+.resume-progress-heading {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.resume-progress-heading h3 {
+  margin: 0 0 8px;
+  font-size: 1.2rem;
+}
+.resume-progress-heading p {
+  margin: 0;
+}
+.resume-progress-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #d5f2e9;
+  color: #12695c;
+  font-size: 28px;
+  font-weight: 700;
+}
+.resume-progress-icon.spinning {
+  background: transparent;
+  border: 5px solid #cce8e0;
+  border-top-color: #178573;
+  animation: resume-spin 1s linear infinite;
+}
+.resume-progress-file {
+  overflow-wrap: anywhere;
+  font-size: 0.875rem;
+}
+.resume-progress-steps {
+  list-style: none;
+  margin: 24px 0 0;
+  padding: 0;
+}
+.resume-progress-steps li {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+}
+.resume-progress-steps li > span {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid #bacbc6;
+  font-weight: 700;
+}
+.resume-progress-steps small {
+  display: block;
+  margin-top: 3px;
+  color: #536b63;
+}
+.resume-progress-steps .current {
+  color: #12695c;
+  font-weight: 700;
+}
+.resume-progress-steps .current > span,
+.resume-progress-steps .done > span {
+  background: #12695c;
+  color: white;
+  border-color: #12695c;
+}
+.resume-progress-steps .pending {
+  color: #536b63;
+}
+.resume-progress-note {
+  margin-bottom: 0;
+  font-size: 0.875rem;
+}
+.resume-progress.failed {
+  background: #fff5f3;
+  border-color: #e8afa6;
+}
+.resume-progress.failed .resume-progress-icon {
+  background: #ffe0db;
+  color: #9b3024;
+}
+@keyframes resume-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .resume-progress-icon.spinning {
+    animation: none;
+  }
+}
+@media (max-width: 600px) {
+  .resume-progress {
+    padding: 18px;
+  }
+  .resume-progress-heading {
+    align-items: flex-start;
+    gap: 12px;
+  }
+}
