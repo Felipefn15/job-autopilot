@@ -1,4 +1,4 @@
-import { LIMITS, digest, validateSettings } from "./core.js";
+import { LIMITS, digest, validateSettings, resumeKeywords } from "./core.js";
 import { settings, profile, event, lock, unlock } from "./db.js";
 import { sourceSpec } from "./discovery.js";
 import { ai, resumePrompt } from "./ai.js";
@@ -160,7 +160,13 @@ export default {
             if (typeof v === "string" && k.length < 100)
               fields[k] = v.slice(0, 2000);
           const data = { ...p.data, text: input.text, fields };
+          const config = await settings(env);
+          const keywords = resumeKeywords(data.skills);
+          if (keywords) config.keywords = keywords;
           await env.DB.batch([
+            env.DB.prepare("UPDATE settings SET data=? WHERE id=1").bind(
+              JSON.stringify(config),
+            ),
             env.DB.prepare(
               "INSERT INTO profiles(id,filename,pdf,data,confirmed) VALUES(?,?,?,?,1)",
             ).bind(

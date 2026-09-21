@@ -57,6 +57,22 @@ export function parseJSON(value) {
     throw new Error("Resposta estruturada inválida.");
   return v;
 }
+export function resumeKeywords(skills) {
+  const terms = [];
+  const seen = new Set();
+  for (const value of Array.isArray(skills) ? skills : []) {
+    if (typeof value !== "string") continue;
+    for (const item of value.split(/[,;\n]/)) {
+      const term = item.trim().replace(/\s+/g, " ");
+      const key = term.toLowerCase();
+      if (!term || term.length > 80 || seen.has(key)) continue;
+      if ([...terms, term].join(", ").length > 500) continue;
+      terms.push(term);
+      seen.add(key);
+    }
+  }
+  return terms.join(", ");
+}
 export function validateSettings(input) {
   const country = String(input.country || "global")
     .trim()

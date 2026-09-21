@@ -549,6 +549,9 @@ function Profile({ data, api, act, busy }) {
     setFields(data.profile?.data.fields || {});
     setText(data.profile?.data.text || "");
   }, [data.profile?.id]);
+  useEffect(() => {
+    setConfig((current) => ({ ...current, keywords: data.config.keywords }));
+  }, [data.config.keywords, data.profile?.id]);
   const update = (key, value) => setConfig({ ...config, [key]: value });
   return (
     <div className="two-column">
@@ -637,7 +640,7 @@ function Profile({ data, api, act, busy }) {
                       fields,
                       text,
                     }),
-                  "Perfil confirmado.",
+                  "Perfil confirmado. Termos de busca atualizados com as tecnologias extraídas, quando disponíveis.",
                 )
               }
             >
@@ -689,7 +692,12 @@ function Profile({ data, api, act, busy }) {
             <input
               value={config.keywords}
               onChange={(e) => update("keywords", e.target.value)}
+              maxLength={500}
             />
+            <small>
+              Preenchidos ao confirmar o currículo. Você pode ajustar os termos
+              antes de salvar as preferências.
+            </small>
           </label>
           <label>
             Pontuação mínima
