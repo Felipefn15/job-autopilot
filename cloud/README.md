@@ -7,8 +7,9 @@ Private single-user application: React dashboard, Cloudflare Worker, D1 and Clou
 - PDF upload (1 MB), Gemini extraction and mandatory owner review.
 - Country/global, remote preference, minimum score, confirmed application facts.
 - Public Greenhouse, Lever and Ashby connectors; conservative JSON-LD JobPosting reader for supplied job URLs.
-- Catalog of up to 2,000 sources, bulk import of 100 URLs per request. One verified Ashby source (Linear) is seeded.
-- One source / one analysis / at most one application per run. Optional two-hour cron, initially disabled.
+- Catalog of up to 2,000 sources, bulk import of 100 URLs per request. Migration 0003 seeds 66 career references whose pages were identified on 2026-09-21. API availability and vacancies are checked at runtime; no vacancy counts are preloaded or promised.
+- Up to five sources / one analysis / at most one application per run. Sources are revisited no sooner than six hours. Optional two-hour cron, initially disabled.
+- Public LinkedIn post URL extraction plus pasted-text import. Login walls, redirects and unavailable or truncated content produce a manual import prompt. No LinkedIn credentials or cookies are collected.
 - Evidence-based analysis; exact quotes verified against the confirmed resume and job text.
 - Gmail OAuth sending with localized, evidence-backed draft and PDF attachment.
 - Bounded Playwright form agent: same-origin navigation, file upload, next steps and submission confirmation.
@@ -17,7 +18,9 @@ Private single-user application: React dashboard, Cloudflare Worker, D1 and Clou
 
 ## Deliberate operational limits
 
-This is an initial implementation, not a tested universal application bot. It does **not** search thousands of sources out of the box. The catalog capacity is 2,000; at the default cron it visits 12 sources/day. There is no paid search API, automatic internet-wide company discovery, LinkedIn login scraping, workarounds for CAPTCHA, or browser session persistence.
+This is an initial implementation, not a tested universal application bot. It does **not** search thousands of sources out of the box. The catalog capacity is 2,000; at the default cron it attempts up to 60 source consultations/day, with one job analysis per run. There is no paid search API, automatic internet-wide company discovery, LinkedIn feed/search crawling, login scraping, workarounds for CAPTCHA, or browser session persistence. LinkedIn support imports specific supplied post URLs; it does not search all posts. Imported posts enter the usual evidence-based analysis. Verified email applications use the normal email flow; other LinkedIn applications require manual follow-up. No live LinkedIn post extraction was verified in this environment; HTML layouts and access restrictions may require pasting the post text.
+
+After updating an existing deployment, run `npm run db:remote` then `npm run deploy` from `cloud/`. The catalog migration is idempotent and preserves already paused sources. Run a batch after confirming the resume to fetch actual jobs. References and verification scope are listed in [CATALOG.md](CATALOG.md).
 
 Browser login, cross-origin application flows, checkbox consent, demographic questions, unsupported iframes/custom controls and ambiguous responses become manual tasks. There is no guarantee of completing every ATS form. Email accepted by Gmail is not proof of delivery. A timeout after sending is `unknown`, never automatically retried.
 

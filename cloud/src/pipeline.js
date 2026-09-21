@@ -52,6 +52,15 @@ export async function apply(env, id, p, config) {
   if (!job || job.status !== "matched" || job.profile_id !== p.id)
     throw new Error("Candidatura não está pronta para este currículo.");
   if (!p.confirmed) throw new Error("Confirme o perfil extraído do currículo.");
+  if (!job.email && new URL(job.url).hostname.endsWith("linkedin.com")) {
+    await status(
+      env,
+      id,
+      "needs_input",
+      "Post LinkedIn sem candidatura por e-mail verificada. Abra o post e siga o link de candidatura manualmente.",
+    );
+    return;
+  }
   const checked = validateAnalysis(
     JSON.parse(job.analysis),
     p.data,
@@ -124,10 +133,10 @@ export async function tick(env, manual = false, applyId = null) {
       await apply(env, applyId, p, config);
       return;
     }
-    const source = await env.DB.prepare(
-      "SELECT * FROM sources WHERE enabled=1 ORDER BY checked_at ASC,id LIMIT 1",
-    ).first();
-    if (source) {
+    const sources = await env.DB.prepare(
+      "SELECT * FROM sources WHERE enabled=1 AND (checked_at IS NULL OR checked_at < datetime('now','-6 hours')) ORDER BY checked_at ASC,id LIMIT 5",
+    ).all();
+    for (const source of sources.results) {
       let error = null;
       try {
         await discover(env, source, config);

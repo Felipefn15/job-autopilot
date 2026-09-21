@@ -1,6 +1,7 @@
 import { LIMITS, digest, validateSettings, resumeKeywords } from "./core.js";
 import { settings, profile, event, lock, unlock } from "./db.js";
-import { sourceSpec } from "./discovery.js";
+import { sourceSpec, fetchText, saveJobs } from "./discovery.js";
+import { linkedinUrl, parseLinkedinPost, linkedinJob } from "./linkedin.js";
 import { ai, resumePrompt } from "./ai.js";
 import { tick } from "./pipeline.js";
 import { emailConfigured } from "./email.js";
@@ -180,6 +181,31 @@ export default {
             ),
           ]);
           return json({ ok: true });
+        });
+      }
+      if (url.pathname === "/api/linkedin/import" && req.method === "POST") {
+        const input = await body(req);
+        const postUrl = linkedinUrl(input.url);
+        return await mutateProfile(env, async () => {
+          let text = input.text;
+          if (!text) {
+            try {
+              text = parseLinkedinPost(await fetchText(postUrl));
+            } catch {
+              throw new Error(
+                "Não foi possível ler o post público. Cole o texto integral do post e importe novamente.",
+              );
+            }
+          }
+          const job = linkedinJob({ ...input, url: postUrl }, text);
+          const id = await digest("linkedin:" + postUrl);
+          const saved = await saveJobs(
+            env,
+            { id, kind: "linkedin", value: postUrl },
+            { keywords: "" },
+            [job],
+          );
+          return json({ ok: true, saved });
         });
       }
       if (url.pathname === "/api/sources" && req.method === "POST") {

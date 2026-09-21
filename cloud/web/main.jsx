@@ -792,6 +792,14 @@ function Profile({ data, api, act, busy }) {
   );
 }
 function Sources({ data, api, act, busy }) {
+  const [post, setPost] = useState({ url: "", text: "", title: "" });
+  const [sourceFilter, setSourceFilter] = useState("");
+  const sourceLink = (s) =>
+    (({
+      greenhouse: "https://job-boards.greenhouse.io/",
+      lever: "https://jobs.lever.co/",
+      ashby: "https://jobs.ashbyhq.com/",
+    })[s.kind] || "") + s.value;
   const [kind, setKind] = useState("greenhouse"),
     [value, setValue] = useState(""),
     [bulk, setBulk] = useState("");
@@ -811,6 +819,8 @@ function Sources({ data, api, act, busy }) {
     } else if (u.hostname === "jobs.ashbyhq.com") {
       k = "ashby";
       v = u.pathname.split("/")[1];
+    } else if (/^(www\.)?linkedin\.com$/.test(u.hostname)) {
+      k = "linkedin";
     }
     return { kind: k, value: v };
   }
@@ -821,7 +831,19 @@ function Sources({ data, api, act, busy }) {
         <p>
           Adicione páginas de empresas em plataformas de recrutamento ou páginas
           individuais de vagas com dados estruturados. O catálogo suporta até
-          2.000 fontes; cada lote consulta uma fonte.
+          2.000 fontes; cada lote consulta até cinco fontes, priorizando as
+          ainda não consultadas.
+        </p>
+        <p>
+          <strong>{data.sources.length} fontes cadastradas</strong> ·{" "}
+          {data.sources.filter((s) => s.enabled).length} ativas ·{" "}
+          {data.sources.filter((s) => s.checked_at && !s.error).length}{" "}
+          consultadas sem erro
+        </p>
+        <p>
+          O catálogo inicial contém referências de carreira. A disponibilidade e
+          as vagas são verificadas durante cada consulta; uma referência
+          cadastrada não significa uma vaga compatível.
         </p>
         <form
           className="source-form"
@@ -840,15 +862,18 @@ function Sources({ data, api, act, busy }) {
               <option value="lever">Lever</option>
               <option value="ashby">Ashby</option>
               <option value="page">Página de vaga</option>
+              <option value="linkedin">Post público do LinkedIn</option>
             </select>
           </label>
           <label>
-            {kind === "page" ? "URL HTTPS da vaga" : "Identificador da empresa"}
+            {["page", "linkedin"].includes(kind)
+              ? "URL HTTPS"
+              : "Identificador da empresa"}
             <input
               value={value}
               onChange={(e) => setValue(e.target.value)}
               placeholder={
-                kind === "page"
+                ["page", "linkedin"].includes(kind)
                   ? "https://empresa.com/carreiras/vaga"
                   : "Identificador no endereço da plataforma"
               }
@@ -887,35 +912,111 @@ function Sources({ data, api, act, busy }) {
           </form>
         </details>
       </section>
+      <section className="panel">
+        <h2>Importar post do LinkedIn</h2>
+        <p>
+          Cole a URL de um post com oportunidade. Tentaremos extrair o texto
+          público. Se o LinkedIn pedir login ou bloquear a leitura, cole o texto
+          integral abaixo. Não é necessário fornecer senha ou cookies.
+        </p>
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            await act(async () => {
+              const result = await api("linkedin/import", "POST", post);
+              if (!result.saved) throw Error("Este post já foi importado.");
+              setPost({ url: "", text: "", title: "" });
+            }, "Post importado. A oportunidade entrou na fila de análise.");
+          }}
+        >
+          <label>
+            URL do post
+            <input
+              type="url"
+              required
+              value={post.url}
+              onChange={(e) => setPost({ ...post, url: e.target.value })}
+              placeholder="https://www.linkedin.com/posts/..."
+            />
+          </label>
+          <label>
+            Título da vaga (opcional)
+            <input
+              maxLength={300}
+              value={post.title}
+              onChange={(e) => setPost({ ...post, title: e.target.value })}
+            />
+          </label>
+          <label>
+            Texto integral do post (opcional quando a leitura pública funcionar)
+            <textarea
+              rows={6}
+              maxLength={20000}
+              value={post.text}
+              onChange={(e) => setPost({ ...post, text: e.target.value })}
+            />
+          </label>
+          <button disabled={busy}>Importar e colocar na fila</button>
+        </form>
+        <p>
+          Posts com instruções explícitas de candidatura por e-mail seguem a
+          análise normal. Candidaturas pelo LinkedIn ou links externos no post
+          precisam de revisão manual.
+        </p>
+      </section>
       <section className="panel source-list">
-        {data.sources.map((s) => (
-          <article key={s.id}>
-            <div>
-              <strong>{s.value}</strong>
-              <p>
-                {s.kind} ·{" "}
-                {s.checked_at
-                  ? "Última consulta: " + s.checked_at
-                  : "Ainda não consultada"}
-              </p>
-              {s.error && <p className="error">{s.error}</p>}
-            </div>
-            <button
-              className="secondary"
-              disabled={busy}
-              onClick={() =>
-                act(() =>
-                  api("source/toggle", "POST", {
-                    id: s.id,
-                    enabled: !s.enabled,
-                  }),
-                )
-              }
-            >
-              {s.enabled ? "Pausar" : "Ativar"}
-            </button>
-          </article>
-        ))}
+        <label>
+          Filtrar fontes
+          <input
+            type="search"
+            value={sourceFilter}
+            onChange={(e) => setSourceFilter(e.target.value)}
+            placeholder="Empresa ou plataforma"
+          />
+        </label>
+        {data.sources
+          .filter((s) =>
+            `${s.value} ${s.kind}`
+              .toLowerCase()
+              .includes(sourceFilter.toLowerCase()),
+          )
+          .map((s) => (
+            <article key={s.id}>
+              <div>
+                <strong>{s.value}</strong>
+                <p>
+                  <a
+                    href={sourceLink(s)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Abrir referência de carreira
+                  </a>
+                </p>
+                <p>
+                  {s.kind} ·{" "}
+                  {s.checked_at
+                    ? "Última consulta: " + s.checked_at
+                    : "Ainda não consultada"}
+                </p>
+                {s.error && <p className="error">{s.error}</p>}
+              </div>
+              <button
+                className="secondary"
+                disabled={busy}
+                onClick={() =>
+                  act(() =>
+                    api("source/toggle", "POST", {
+                      id: s.id,
+                      enabled: !s.enabled,
+                    }),
+                  )
+                }
+              >
+                {s.enabled ? "Pausar" : "Ativar"}
+              </button>
+            </article>
+          ))}
         {!data.sources.length && <p>Nenhuma fonte cadastrada.</p>}
       </section>
     </>

@@ -1,9 +1,11 @@
 import { publicUrl, cleanText, digest, LIMITS } from "./core.js";
 import { event } from "./db.js";
+import { linkedinUrl, parseLinkedinPost, linkedinJob } from "./linkedin.js";
 export function sourceSpec(kind, value) {
-  if (!["greenhouse", "lever", "ashby", "page"].includes(kind))
+  if (!["greenhouse", "lever", "ashby", "page", "linkedin"].includes(kind))
     throw new Error("Fonte não suportada.");
   if (kind === "page") return { kind, value: publicUrl(value) };
+  if (kind === "linkedin") return { kind, value: linkedinUrl(value) };
   if (!/^[a-zA-Z0-9_-]{1,100}$/.test(value))
     throw new Error("Use o identificador da empresa no ATS.");
   return { kind, value };
@@ -124,6 +126,13 @@ export async function discover(env, source, config) {
         url: j.applyUrl || j.jobUrl,
         description: j.descriptionPlain || j.descriptionHtml,
       }));
+  } else if (source.kind === "linkedin") {
+    jobs = [
+      linkedinJob(
+        { url: source.value },
+        parseLinkedinPost(await fetchText(source.value)),
+      ),
+    ];
   } else {
     const u = new URL(source.value);
     // Conservative robots handling: custom pages require an explicit allow or no robots file.
@@ -146,7 +155,25 @@ export async function discover(env, source, config) {
         "Página sem JobPosting estruturado. Cadastre a página individual da vaga ou um ATS.",
       );
   }
+  return saveJobs(env, source, config, jobs);
+}
+
+export async function saveJobs(env, source, config, jobs) {
   let saved = 0;
+  let pending = [],
+    bytes = 2;
+  const encoder = new TextEncoder();
+  async function flush() {
+    if (!pending.length) return;
+    const r = await env.DB.prepare(
+      "INSERT OR IGNORE INTO jobs(id,source_id,title,company,location,url,description) SELECT json_extract(value,'$.id'),json_extract(value,'$.source_id'),json_extract(value,'$.title'),json_extract(value,'$.company'),json_extract(value,'$.location'),json_extract(value,'$.url'),json_extract(value,'$.description') FROM json_each(?)",
+    )
+      .bind(JSON.stringify(pending))
+      .run();
+    saved += r.meta.changes;
+    pending = [];
+    bytes = 2;
+  }
   const keys = config.keywords
     .split(",")
     .map((s) => s.trim().toLowerCase())
@@ -168,21 +195,21 @@ export async function discover(env, source, config) {
       continue;
     }
     const id = await digest(j.url);
-    const r = await env.DB.prepare(
-      "INSERT OR IGNORE INTO jobs(id,source_id,title,company,location,url,description) VALUES(?,?,?,?,?,?,?)",
-    )
-      .bind(
-        id,
-        source.id,
-        j.title,
-        cleanText(j.company || source.value).slice(0, 200),
-        cleanText(j.location || "Não informado").slice(0, 300),
-        j.url,
-        j.description,
-      )
-      .run();
-    saved += r.meta.changes;
+    const row = {
+      id,
+      source_id: source.id,
+      title: j.title,
+      company: cleanText(j.company || source.value).slice(0, 200),
+      location: cleanText(j.location || "Não informado").slice(0, 300),
+      url: j.url,
+      description: j.description,
+    };
+    const size = encoder.encode(JSON.stringify(row)).length + 1;
+    if (bytes + size > 1000000) await flush();
+    pending.push(row);
+    bytes += size;
   }
+  await flush();
   await event(
     env,
     "discovery",
