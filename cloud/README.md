@@ -36,18 +36,27 @@ npx wrangler login
 npx wrangler d1 create job-autopilot
 ```
 
-Replace only the placeholder `database_id` in `wrangler.jsonc` with the returned D1 database ID. Preserve Workers Free; do not activate a paid Workers subscription.
+This repository already has the owner's D1 database ID configured. Reuse that database for this deployment. For a separate account, replace `database_id` with its new ID and preserve the binding name `DB`. Preserve Workers Free; do not activate a paid Workers subscription.
 
 ```bash
 npm run db:remote
 npx wrangler secret put APP_TOKEN
 npx wrangler secret put GEMINI_API_KEY
+npx wrangler secret put GROQ_API_KEY
 npm run test
 npm run check
 npm run deploy
 ```
 
 Use a randomly generated APP_TOKEN of at least 32 characters. Save it in a password manager and enter it at the dashboard login; it is held only in the current browser tab, never localStorage. Never commit `.dev.vars`, tokens, cookies, PDFs or account credentials.
+
+### Groq quota fallback
+
+`GROQ_API_KEY` is optional. Gemini remains primary; HTTP 429 (quota or rate limit) triggers one Groq attempt using `GROQ_MODEL` (default `llama-3.3-70b-versatile`). With only Groq configured, text tasks also work. Each provider attempt counts against the shared `DAILY_AI_LIMIT` (maximum 30); fallback never bypasses the application's own daily budget. Groq exhaustion stops the operation. Authentication errors, invalid JSON and truncated responses do not trigger further retries. All downstream evidence and form validations remain unchanged.
+
+For resume import, Groq receives text extracted locally by unpdf, not the binary PDF. Up to 20 pages / 60,000 extracted characters are supported. Scanned/image-only pages or pages with insufficient text require a selectable-text PDF or Gemini availability; there is no Groq OCR fallback. Review and confirmation remain mandatory. PDF parsing CPU usage still needs validation on the actual Workers Free account. Groq receives resume/job/form text when used; configure a key for a free account if zero cost is required. Model availability and account quotas still apply.
+
+References: https://console.groq.com/docs/text-chat, https://console.groq.com/docs/rate-limits, https://github.com/unjs/unpdf.
 
 Configure optional Gmail secrets with `wrangler secret put`: `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`, `GMAIL_FROM`. Obtain an offline OAuth refresh token with `https://www.googleapis.com/auth/gmail.send` using your own Google OAuth app; an OAuth testing app may issue expiring refresh tokens. The current implementation expects the refresh token to be provisioned outside the app; no Gmail OAuth onboarding UI is implemented yet.
 

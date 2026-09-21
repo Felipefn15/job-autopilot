@@ -22,6 +22,7 @@
   "triggers": { "crons": ["17 */2 * * *"] },
   "vars": {
     "GEMINI_MODEL": "gemini-2.5-flash",
+    "GROQ_MODEL": "llama-3.3-70b-versatile",
     "DAILY_AI_LIMIT": "30",
     "DAILY_APPLICATION_LIMIT": "3",
     "DAILY_BROWSER_LIMIT": "3",

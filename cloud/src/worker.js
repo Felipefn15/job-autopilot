@@ -87,7 +87,7 @@ export default {
           events: events.results,
           usage: usage.results,
           capabilities: {
-            ai: !!env.GEMINI_API_KEY,
+            ai: !!(env.GEMINI_API_KEY || env.GROQ_API_KEY),
             email: emailConfigured(env),
             browser: !!env.BROWSER,
           },
