@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
+import { countryOptions, countrySelection } from "./countries.js";
 const labels = {
   discovered: "Encontrada",
   matched: "Compatível",
@@ -567,25 +568,31 @@ function Profile({ data, api, act, busy }) {
           }}
         >
           <label>
-            País de interesse
-            <input
-              list="countries"
-              value={config.country}
+            País ou região de interesse
+            <select
+              value={countrySelection(config.country)}
               onChange={(e) => update("country", e.target.value)}
               required
-            />
-            <datalist id="countries">
-              {[
+            >
+              <option value="global">Mundo / World</option>
+              <option value="LATAM">América Latina (LATAM)</option>
+              {![
                 "global",
-                "Brasil",
-                "Estados Unidos",
-                "Canadá",
-                "Portugal",
-                "Alemanha",
-              ].map((c) => (
-                <option key={c} value={c} />
-              ))}
-            </datalist>
+                "LATAM",
+                ...countryOptions.map((c) => c.name),
+              ].includes(countrySelection(config.country)) && (
+                <option value={config.country}>
+                  {config.country} (seleção anterior)
+                </option>
+              )}
+              <optgroup label="Países e territórios">
+                {countryOptions.map((c) => (
+                  <option key={c.code} value={c.name}>
+                    {c.name}
+                  </option>
+                ))}
+              </optgroup>
+            </select>
           </label>
           <label>
             Termos de busca, separados por vírgula
