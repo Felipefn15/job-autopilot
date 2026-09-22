@@ -5,6 +5,8 @@ import { linkedinUrl, parseLinkedinPost, linkedinJob } from "./linkedin.js";
 import { ai, resumePrompt } from "./ai.js";
 import { tick } from "./pipeline.js";
 import { emailConfigured } from "./email.js";
+import { cloudLinkedin } from "./linkedin-cloud.js";
+export { LinkedInCloud } from "./linkedin-cloud.js";
 const headers = {
   "Content-Type": "application/json; charset=utf-8",
   "Cache-Control": "no-store",
@@ -56,6 +58,25 @@ export default {
     )
       return json({ error: "Origem não permitida." }, 403);
     try {
+      if (url.pathname.startsWith("/api/linkedin/cloud/")) {
+        const action = url.pathname.slice("/api/linkedin/cloud/".length);
+        if (
+          (action === "status" && req.method === "GET") ||
+          ([
+            "login",
+            "confirm",
+            "collect",
+            "disconnect",
+            "cancel",
+            "enable",
+            "disable",
+          ].includes(action) &&
+            req.method === "POST")
+        ) {
+          return await cloudLinkedin(env, action);
+        }
+        return json({ error: "Rota não encontrada." }, 404);
+      }
       if (url.pathname === "/api/state" && req.method === "GET") {
         const [config, p, sources, jobs, events, usage, collector] =
           await Promise.all([
@@ -331,6 +352,7 @@ export default {
     // Keep automatic processing disabled until the owner confirms the profile/preferences.
     try {
       await tick(env, false);
+      if (env.LINKEDIN_CLOUD) await cloudLinkedin(env, "scheduled");
     } catch (e) {
       await event(env, "run_error", e.message).catch(() => {});
     }

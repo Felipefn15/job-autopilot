@@ -19,6 +19,12 @@
     },
   ],
   "browser": { "binding": "BROWSER" },
+  "durable_objects": {
+    "bindings": [{ "name": "LINKEDIN_CLOUD", "class_name": "LinkedInCloud" }],
+  },
+  "migrations": [
+    { "tag": "v1-linkedin-cloud", "new_sqlite_classes": ["LinkedInCloud"] },
+  ],
   "triggers": { "crons": ["17 */2 * * *"] },
   "vars": {
     "GEMINI_MODEL": "gemini-2.5-flash",

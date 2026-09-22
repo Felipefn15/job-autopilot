@@ -805,6 +805,165 @@ function Profile({ data, api, act, busy }) {
     </div>
   );
 }
+function LinkedInCloudPanel({ api, act, busy }) {
+  const [state, setState] = useState(null),
+    [liveUrl, setLiveUrl] = useState(""),
+    [loadError, setLoadError] = useState("");
+  const refresh = async () => setState(await api("linkedin/cloud/status"));
+  useEffect(() => {
+    refresh().catch((e) => setLoadError(e.message));
+  }, []);
+  const run = (action) =>
+    act(async () => {
+      try {
+        const result = await api(`linkedin/cloud/${action}`, "POST");
+        if (action === "login") setLiveUrl(result.liveUrl);
+        else if (["confirm", "cancel", "disconnect"].includes(action))
+          setLiveUrl("");
+      } finally {
+        await refresh();
+      }
+    });
+  const names = {
+    disconnected: "Desconectado",
+    connecting: "Aguardando seu login",
+    saved: "Sessão salva — teste a restauração",
+    verified: "Busca validada em uma nova sessão",
+    running: "Buscando posts",
+    no_results: "Nenhum post legível — revise filtros e sessão",
+    needs_login: "Reconexão necessária",
+    error: "Falha no navegador remoto",
+    login_expired: "Tempo de login encerrado",
+    interrupted: "Coleta interrompida",
+    cancelled: "Login cancelado",
+  };
+  return (
+    <section className="panel">
+      <h2>LinkedIn na Cloudflare</h2>
+      <p>
+        Entre no navegador remoto, salve a sessão e teste uma busca pelos termos
+        do seu currículo. Após conectar, as buscas podem rodar com seu
+        computador desligado.
+      </p>
+      {loadError && <p role="alert">{loadError}</p>}
+      {state && (
+        <>
+          <p role="status">
+            <strong>{names[state.state] || state.state}</strong>
+          </p>
+          {!state.configured && (
+            <p>
+              Configure o segredo LINKEDIN_SESSION_KEY conforme o guia de
+              instalação para habilitar a conexão.
+            </p>
+          )}
+          <p>
+            O login tem até 3 minutos. A coleta usa até 45 segundos e
+            compartilha a cota diária de navegador com as candidaturas.
+          </p>
+          {state.expiresAt && (
+            <p>
+              Sessão temporária até{" "}
+              {new Date(state.expiresAt).toLocaleTimeString()}.
+            </p>
+          )}
+          {liveUrl && state.state === "connecting" && (
+            <p>
+              <a
+                href={liveUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                referrerPolicy="no-referrer"
+              >
+                Abrir navegador remoto e fazer login no LinkedIn
+              </a>
+            </p>
+          )}
+          <div className="actions">
+            <button
+              disabled={
+                busy ||
+                !state.configured ||
+                state.state === "connecting" ||
+                state.state === "running"
+              }
+              onClick={() => run("login")}
+            >
+              Conectar LinkedIn
+            </button>
+            {state.state === "connecting" && (
+              <>
+                <button disabled={busy} onClick={() => run("confirm")}>
+                  Já entrei — salvar sessão
+                </button>
+                <button
+                  className="secondary"
+                  disabled={busy}
+                  onClick={() => run("cancel")}
+                >
+                  Cancelar login
+                </button>
+              </>
+            )}
+            <button
+              disabled={
+                busy ||
+                !state.configured ||
+                !["saved", "verified", "no_results"].includes(state.state)
+              }
+              onClick={() => run("collect")}
+            >
+              Testar busca na nuvem
+            </button>
+            <button
+              className="secondary"
+              disabled={busy}
+              onClick={() => act(refresh)}
+            >
+              Atualizar estado
+            </button>
+            <button
+              className="secondary"
+              disabled={busy}
+              onClick={() => run("disconnect")}
+            >
+              Desconectar e apagar sessão
+            </button>
+          </div>
+          {busy && (
+            <p role="status">
+              Processando… a coleta pode levar até 45 segundos.
+            </p>
+          )}
+          {state.lastRun && (
+            <p>
+              Última coleta: {new Date(state.lastRun).toLocaleString()} ·{" "}
+              {state.saved ?? 0} novos posts. Veja os detalhes em Atividade.
+            </p>
+          )}
+          <p>
+            Agendamento LinkedIn:{" "}
+            <strong>{state.automatic ? "ativado" : "desativado"}</strong>.
+            Também depende do agendamento geral em Preferências.
+          </p>
+          <button
+            className="secondary"
+            disabled={busy || (!state.automatic && state.state !== "verified")}
+            onClick={() => run(state.automatic ? "disable" : "enable")}
+          >
+            {state.automatic
+              ? "Pausar busca automática"
+              : "Ativar busca automática após teste"}
+          </button>
+          <p>
+            Se aparecer login, verificação ou bloqueio, a coleta para e pede sua
+            atenção. Nenhuma candidatura é enviada por este teste.
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
 function Sources({ data, api, act, busy }) {
   const [post, setPost] = useState({ url: "", text: "", title: "" });
   const [sourceFilter, setSourceFilter] = useState("");
@@ -852,6 +1011,7 @@ function Sources({ data, api, act, busy }) {
   }
   return (
     <>
+      <LinkedInCloudPanel api={api} act={act} busy={busy} />
       <section className="panel">
         <h2>Catálogo de fontes</h2>
         <p>

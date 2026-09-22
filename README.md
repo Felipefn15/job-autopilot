@@ -12,7 +12,7 @@ React + Cloudflare Workers Free + D1 + Browser Run. Processamento em lotes limit
 
 O catálogo comporta 2.000 fontes e inclui 76 referências após a migração 0004, com 15 fontes brasileiras priorizadas por padrão. Inclui Greenhouse, Lever, Ashby, comunidades de vagas no GitHub, canal público do Telegram, JobPosting e posts do LinkedIn. Cada lote consulta até cinco fontes (quatro brasileiras e uma global, conforme disponibilidade) e analisa uma vaga; no agendamento padrão são até 60 consultas de fontes por dia. A atividade diferencia vagas recebidas, filtradas, duplicadas e novas. Não há garantia de vagas novas em cada execução.
 
-A busca autenticada de posts do LinkedIn usa o [coletor Chromium local](collector/README.md), com perfil persistente no seu computador e integração ao painel. Para manter a busca periódica, o computador precisa permanecer ligado e o coletor aberto. Cookies e senha não são enviados à nuvem. Atualize o banco e o Worker antes de usar: em `cloud/`, execute `npm run db:remote` e `npm run deploy`.
+A busca autenticada de posts tem duas opções: [navegador na Cloudflare](cloud/LINKEDIN_CLOUD.md), com login manual remoto e sessão criptografada, ou [coletor Chromium local](collector/README.md). O modo Cloudflare permite desligar o computador após conectar, mas precisa de validação real do acesso ao LinkedIn e tem coleta limitada pela cota diária gratuita. Veja o guia para configurar LINKEDIN_SESSION_KEY e publicar. O modo local continua disponível como complemento.
 
 Veja [instalação, publicação, limites e recursos implementados](cloud/README.md).
 

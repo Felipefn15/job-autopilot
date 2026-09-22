@@ -13,6 +13,7 @@ import { discover } from "./discovery.js";
 import { selectSources } from "./community.js";
 import { sendEmail, emailConfigured } from "./email.js";
 import { browserApply } from "./browser.js";
+import { reserveBrowserSeconds } from "./linkedin-cloud-core.js";
 export async function analyze(env, job, p, config) {
   const a = await ai(
     env,
@@ -91,6 +92,8 @@ export async function apply(env, id, p, config) {
     ))
   )
     throw new Error("Limite diário de candidaturas atingido.");
+  if (!job.email && !(await reserveBrowserSeconds(env, 150)))
+    throw new Error("Cota diária compartilhada de navegador atingida.");
   if (
     !job.email &&
     !(await reserve(
