@@ -45,7 +45,7 @@ class API:
 
 
 def queries(config):
-    terms = [re.sub(r'[^\w .+#-]', '', t).strip() for t in config.get("keywords", "").split(",")]
+    terms = [re.sub(r'[^\w .+#-]', '', t).strip() for t in (config.get("targetRoles") or config.get("keywords", "")).split(",")]
     terms = [t[:60] for t in terms if t][:9]
     if not terms:
         raise ValueError("Configure tecnologias nas preferências do painel.")

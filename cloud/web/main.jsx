@@ -3,7 +3,8 @@ import { createRoot } from "react-dom/client";
 import "./style.css";
 import { countryOptions, countrySelection } from "./countries.js";
 const labels = {
-  discovered: "Encontrada",
+  discovered: "Aguardando análise",
+  filtered: "Fora das preferências",
   matched: "Compatível",
   rejected: "Descartada",
   needs_input: "Sua atenção",
@@ -21,7 +22,7 @@ function App() {
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false),
     [selected, setSelected] = useState(null),
-    [filter, setFilter] = useState("all");
+    [filter, setFilter] = useState("active");
   async function api(path, method = "GET", body) {
     const r = await fetch("/api/" + path, {
       method,
@@ -204,7 +205,7 @@ function App() {
           <>
             <div className="stats">
               {[
-                ["Encontradas", counts.discovered],
+                ["Aguardando análise", counts.discovered],
                 ["Compatíveis", counts.matched],
                 ["Enviadas", counts.submitted],
                 ["Sua atenção", counts.needs_input + counts.unknown],
@@ -222,6 +223,7 @@ function App() {
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
               >
+                <option value="active">Em avaliação e candidaturas</option>
                 <option value="all">Todos os status</option>
                 {Object.entries(labels).map(([k, v]) => (
                   <option key={k} value={k}>
@@ -231,8 +233,19 @@ function App() {
               </select>
             </div>
             <section className="job-list">
+              <p>
+                “Aguardando análise” ainda não indica compatibilidade. A
+                pontuação mínima é aplicada após a avaliação do currículo pela
+                IA.
+              </p>
               {jobs
-                .filter((j) => filter === "all" || j.status === filter)
+                .filter(
+                  (j) =>
+                    filter === "all" ||
+                    (filter === "active"
+                      ? !["filtered", "rejected"].includes(j.status)
+                      : j.status === filter),
+                )
                 .map((j) => (
                   <button
                     className="job"
@@ -696,7 +709,22 @@ function Profile({ data, api, act, busy }) {
             />
             <small>
               Preenchidos ao confirmar o currículo. Você pode ajustar os termos
-              antes de salvar as preferências.
+              antes de salvar as preferências. Termos genéricos como Scrum não
+              bastam para selecionar qualquer cargo que os mencione.
+            </small>
+          </label>
+          <label>
+            Cargos de interesse, separados por vírgula
+            <input
+              value={config.targetRoles || ""}
+              onChange={(e) => update("targetRoles", e.target.value)}
+              maxLength={500}
+              placeholder="Ex.: Scrum Master, Gerente de projetos, Project Manager"
+            />
+            <small>
+              Opcional. O título precisa conter um dos cargos informados. Inclua
+              variações em inglês quando desejar. As competências são avaliadas
+              separadamente.
             </small>
           </label>
           <label>
@@ -1249,7 +1277,7 @@ function Sources({ data, api, act, busy }) {
                     return (
                       <p>
                         {m.received} recebidas · {m.scanned} examinadas ·{" "}
-                        {m.filtered} fora dos termos · {m.duplicates} já
+                        {m.filtered} fora das preferências · {m.duplicates} já
                         cadastradas · <strong>{m.saved} novas</strong>
                       </p>
                     );

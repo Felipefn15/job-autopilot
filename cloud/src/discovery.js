@@ -1,5 +1,6 @@
 import { publicUrl, cleanText, digest, LIMITS } from "./core.js";
 import { event } from "./db.js";
+import { triageJob } from "./triage.js";
 import { githubJobs, telegramJobs, sourceWindow } from "./community.js";
 import { linkedinUrl, parseLinkedinPost, linkedinJob } from "./linkedin.js";
 export function sourceSpec(kind, value) {
@@ -225,10 +226,6 @@ export async function saveJobs(env, source, config, jobs, stats = {}) {
     pending = [];
     bytes = 2;
   }
-  const keys = config.keywords
-    .split(",")
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
   Object.assign(stats, {
     received: stats.received ?? jobs.length,
     scanned: 0,
@@ -244,12 +241,7 @@ export async function saveJobs(env, source, config, jobs, stats = {}) {
       stats.invalid++;
       continue;
     }
-    if (
-      keys.length &&
-      !keys.some((k) =>
-        (j.title + " " + j.description).toLowerCase().includes(k),
-      )
-    ) {
+    if (!triageJob(j, config).pass) {
       stats.filtered++;
       continue;
     }
@@ -281,7 +273,7 @@ export async function saveJobs(env, source, config, jobs, stats = {}) {
   await event(
     env,
     "discovery",
-    `${source.kind}/${source.value}: ${stats.received} recebidas, ${stats.scanned} examinadas, ${stats.filtered} fora dos termos, ${stats.invalid} incompletas, ${stats.duplicates} já cadastradas, ${saved} novas.`,
+    `${source.kind}/${source.value}: ${stats.received} recebidas, ${stats.scanned} examinadas, ${stats.filtered} fora das preferências, ${stats.invalid} incompletas, ${stats.duplicates} já cadastradas, ${saved} novas.`,
   );
   return saved;
 }

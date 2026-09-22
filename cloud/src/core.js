@@ -103,6 +103,7 @@ export function validateSettings(input) {
     autoApply: input.autoApply === true,
     enabled: input.enabled === true,
     keywords: String(input.keywords || "").slice(0, 500),
+    targetRoles: String(input.targetRoles || "").slice(0, 500),
     facts,
   };
 }

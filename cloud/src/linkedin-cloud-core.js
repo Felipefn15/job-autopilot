@@ -41,7 +41,7 @@ export async function openSession(value, secret) {
   return JSON.parse(new TextDecoder().decode(raw));
 }
 export function linkedinQuery(config, cursor = 0) {
-  const terms = String(config.keywords || "")
+  const terms = String(config.targetRoles || config.keywords || "")
     .split(",")
     .map((t) => t.replace(/[^\p{L}\p{N} .+#-]/gu, "").trim())
     .filter(Boolean)

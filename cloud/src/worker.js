@@ -6,6 +6,7 @@ import { ai, resumePrompt } from "./ai.js";
 import { tick } from "./pipeline.js";
 import { emailConfigured } from "./email.js";
 import { cloudLinkedin } from "./linkedin-cloud.js";
+import { retriage } from "./triage.js";
 export { LinkedInCloud } from "./linkedin-cloud.js";
 const headers = {
   "Content-Type": "application/json; charset=utf-8",
@@ -128,9 +129,10 @@ export default {
               JSON.stringify(config),
             ),
             env.DB.prepare(
-              "UPDATE jobs SET status='discovered',analysis=NULL,draft=NULL,score=NULL WHERE status IN ('matched','rejected','needs_input')",
+              "UPDATE jobs SET status='discovered',analysis=NULL,draft=NULL,score=NULL,triage_key=NULL WHERE status IN ('discovered','matched','rejected','needs_input','filtered')",
             ),
           ]);
+          await retriage(env, config);
         });
         return json({ ok: true });
       }
@@ -165,7 +167,7 @@ export default {
               "INSERT INTO profiles(id,filename,pdf,data) VALUES(?,?,?,?)",
             ).bind(id, String(f.name).slice(0, 200), pdf, JSON.stringify(data)),
             env.DB.prepare(
-              "UPDATE jobs SET status='discovered',analysis=NULL,draft=NULL,score=NULL WHERE status IN ('matched','rejected','needs_input')",
+              "UPDATE jobs SET status='discovered',analysis=NULL,draft=NULL,score=NULL,triage_key=NULL WHERE status IN ('discovered','matched','rejected','needs_input','filtered')",
             ),
           ]);
           return json({ ok: true, id });
@@ -203,7 +205,7 @@ export default {
               JSON.stringify(data),
             ),
             env.DB.prepare(
-              "UPDATE jobs SET status='discovered',analysis=NULL,draft=NULL,score=NULL WHERE status IN ('matched','rejected','needs_input')",
+              "UPDATE jobs SET status='discovered',analysis=NULL,draft=NULL,score=NULL,triage_key=NULL WHERE status IN ('discovered','matched','rejected','needs_input','filtered')",
             ),
           ]);
           return json({ ok: true });
@@ -263,7 +265,7 @@ export default {
           const saved = await saveJobs(
             env,
             { id, kind: "linkedin", value: postUrl },
-            { keywords: "" },
+            await settings(env),
             [job],
           );
           return json({ ok: true, saved });
