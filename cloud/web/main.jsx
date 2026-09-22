@@ -121,6 +121,14 @@ function App() {
     ["history", "Atividade"],
   ];
   const current = jobs.find((j) => j.id === selected);
+  const visibleJobs = jobs.filter(
+    (j) =>
+      filter === "all" ||
+      (filter === "active"
+        ? !["filtered", "rejected"].includes(j.status)
+        : j.status === filter),
+  );
+  const hasRoles = !!data.config.targetRoles?.trim();
   return (
     <div className="shell">
       <aside>
@@ -206,17 +214,60 @@ function App() {
           <>
             <div className="stats">
               {[
-                ["Aguardando análise", counts.discovered],
-                ["Compatíveis", counts.matched],
-                ["Enviadas", counts.submitted],
-                ["Sua atenção", counts.needs_input + counts.unknown],
-              ].map(([label, value]) => (
-                <article key={label}>
+                ["Na fila da IA", counts.discovered, "discovered", "◷"],
+                ["Compatíveis", counts.matched, "matched", "✓"],
+                ["Enviadas", counts.submitted, "submitted", "↗"],
+                [
+                  "Sua atenção",
+                  counts.needs_input + counts.unknown,
+                  "attention",
+                  "!",
+                ],
+              ].map(([label, value, tone, icon]) => (
+                <article key={label} className={"metric metric-" + tone}>
+                  <i aria-hidden="true">{icon}</i>
                   <span>{label}</span>
                   <strong>{value}</strong>
                 </article>
               ))}
             </div>
+            <div className="search-summary">
+              <div>
+                <span className="eyebrow">
+                  BUSCA ATUAL · PREFERÊNCIAS SALVAS
+                </span>
+                <strong>
+                  {data.config.targetRoles ||
+                    data.config.keywords ||
+                    "Sem termos definidos"}
+                </strong>
+                <div className="search-tags">
+                  <span>{data.config.country || "Global"}</span>
+                  <span>
+                    {data.config.remoteOnly
+                      ? "Somente remoto"
+                      : "Todas as modalidades"}
+                  </span>
+                  <span>Nota mínima {data.config.minScore ?? 60}/100</span>
+                </div>
+              </div>
+              <button className="secondary" onClick={() => setTab("profile")}>
+                Editar busca
+              </button>
+            </div>
+            {!hasRoles && managementSearch(data.config) && (
+              <div className="search-alert">
+                <span>
+                  <strong>Defina seus cargos de interesse</strong>
+                  <br />
+                  Há apenas competências salvas. Adicione os cargos e salve as
+                  preferências.
+                </span>
+                <button className="secondary" onClick={() => setTab("profile")}>
+                  Definir cargos
+                </button>
+              </div>
+            )}
             <div className="section-heading">
               <h2>Oportunidades</h2>
               <select
@@ -224,7 +275,7 @@ function App() {
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
               >
-                <option value="active">Em avaliação e candidaturas</option>
+                <option value="active">Em andamento</option>
                 <option value="all">Todos os status</option>
                 {Object.entries(labels).map(([k, v]) => (
                   <option key={k} value={k}>
@@ -233,69 +284,90 @@ function App() {
                 ))}
               </select>
             </div>
+            <ol className="match-steps" aria-label="Etapas de avaliação">
+              <li>
+                <b>1</b>
+                <span>
+                  Pré-filtro<small>Suas preferências</small>
+                </span>
+              </li>
+              <li>
+                <b>2</b>
+                <span>
+                  Análise da IA<small>Experiência do currículo</small>
+                </span>
+              </li>
+              <li>
+                <b>3</b>
+                <span>
+                  Compatível<small>Nota ≥ {data.config.minScore ?? 60}</small>
+                </span>
+              </li>
+            </ol>
             <section className="job-list">
-              <p>
-                “Aguardando análise” ainda não indica compatibilidade. A
-                pontuação mínima é aplicada após a avaliação do currículo pela
-                IA.
-              </p>
-              {jobs
-                .filter(
-                  (j) =>
-                    filter === "all" ||
-                    (filter === "active"
-                      ? !["filtered", "rejected"].includes(j.status)
-                      : j.status === filter),
-                )
-                .map((j) => (
-                  <button
-                    className="job"
-                    key={j.id}
-                    onClick={() => setSelected(j.id)}
-                  >
-                    <div className="company-avatar">
-                      {j.company.slice(0, 2).toUpperCase()}
-                    </div>
-                    <div className="job-title">
-                      <strong>{j.title}</strong>
-                      <span>
-                        {j.company} · {j.location}
-                      </span>
-                    </div>
-                    <span className={"status " + j.status}>
-                      {labels[j.status]}
+              {visibleJobs.map((j) => (
+                <button
+                  className="job"
+                  key={j.id}
+                  onClick={() => setSelected(j.id)}
+                >
+                  <div className="company-avatar">
+                    {j.company.slice(0, 2).toUpperCase()}
+                  </div>
+                  <div className="job-title">
+                    <strong>{j.title}</strong>
+                    <span>
+                      {j.company} · {j.location}
                     </span>
-                    <strong className="score">
-                      {j.score === null ? "—" : j.score}
-                      <small>{j.score === null ? "" : "/100"}</small>
-                    </strong>
-                  </button>
-                ))}
-              {!jobs.length && (
+                  </div>
+                  <span className={"status " + j.status}>
+                    {labels[j.status]}
+                  </span>
+                  <strong className="score">
+                    {j.score === null ? "—" : j.score}
+                    <small>{j.score === null ? "" : "/100"}</small>
+                  </strong>
+                </button>
+              ))}
+              {!visibleJobs.length && (
                 <div className="empty">
                   <div className="empty-icon">↗</div>
-                  <h2>Comece pelo seu currículo</h2>
+                  <h2>
+                    {!data.profile?.confirmed
+                      ? "Comece pelo seu currículo"
+                      : filter === "active"
+                        ? "Nenhuma oportunidade em andamento"
+                        : "Nenhuma vaga neste filtro"}
+                  </h2>
                   <p>
-                    Confirme seu perfil, adicione fontes de vagas e execute o
-                    primeiro lote. As oportunidades aparecerão aqui com os
-                    motivos da compatibilidade.
+                    {!data.profile?.confirmed
+                      ? "Confirme seu perfil para iniciar a busca."
+                      : filter === "active"
+                        ? "Consulte os resultados da coleta ou ajuste sua busca para o próximo lote."
+                        : "Escolha outro status para ver as oportunidades coletadas."}
                   </p>
                   <button
                     className="secondary"
                     onClick={() =>
-                      setTab(data.profile?.confirmed ? "sources" : "profile")
+                      !data.profile?.confirmed
+                        ? setTab("profile")
+                        : filter === "active"
+                          ? setTab("history")
+                          : setFilter("all")
                     }
                   >
                     {data.profile?.confirmed
-                      ? "Adicionar fontes"
+                      ? filter === "active"
+                        ? "Ver atividade da coleta"
+                        : "Ver todos os status"
                       : "Enviar currículo"}
                   </button>
                 </div>
               )}
             </section>
             <p className="footnote">
-              Mostrando as 200 oportunidades mais recentes. Uma pontuação indica
-              compatibilidade, não probabilidade de contratação.
+              {visibleJobs.length} exibidas · Histórico limitado às 200 mais
+              recentes. Nota = compatibilidade com o perfil.
             </p>
             <section className="quota">
               <h2>Uso de hoje</h2>
