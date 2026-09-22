@@ -1,3 +1,4 @@
+import { expandedRoles } from "./roles.js";
 export function sessionKeyReady(secret) {
   return typeof secret === "string" && /^[0-9a-f]{64}$/i.test(secret);
 }
@@ -41,7 +42,11 @@ export async function openSession(value, secret) {
   return JSON.parse(new TextDecoder().decode(raw));
 }
 export function linkedinQuery(config, cursor = 0) {
-  const terms = String(config.targetRoles || config.keywords || "")
+  const terms = String(
+    config.targetRoles
+      ? expandedRoles(config.targetRoles).join(",")
+      : config.keywords || "",
+  )
     .split(",")
     .map((t) => t.replace(/[^\p{L}\p{N} .+#-]/gu, "").trim())
     .filter(Boolean)

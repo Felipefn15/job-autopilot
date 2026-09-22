@@ -1,6 +1,7 @@
 import { publicUrl, cleanText, digest, LIMITS } from "./core.js";
 import { event } from "./db.js";
 import { triageJob } from "./triage.js";
+import { workplaceLocation } from "./roles.js";
 import { githubJobs, telegramJobs, sourceWindow } from "./community.js";
 import { linkedinUrl, parseLinkedinPost, linkedinJob } from "./linkedin.js";
 export function sourceSpec(kind, value) {
@@ -41,7 +42,44 @@ export async function fetchText(url, max = 12000000) {
   });
   if (r.status >= 300 && r.status < 400)
     throw new Error("Redirecionamento: cadastre a URL final da fonte.");
-  if (!r.ok) throw new Error(`Fonte retornou HTTP ${r.status}.`);
+  if (!r.ok) {
+    if (
+      new URL(u).hostname === "api.github.com" &&
+      [403, 429].includes(r.status)
+    ) {
+      const limited =
+        r.status === 429 ||
+        r.headers.get("x-ratelimit-remaining") === "0" ||
+        r.headers.has("retry-after");
+      if (limited) {
+        const retry = r.headers.get("retry-after");
+        const retryMs = retry
+          ? /^\d+$/.test(retry)
+            ? Date.now() + Number(retry) * 1000
+            : Date.parse(retry)
+          : Number(r.headers.get("x-ratelimit-reset")) * 1000;
+        const until = Math.max(
+          Date.now() + 60000,
+          Number.isFinite(retryMs) && retryMs > Date.now()
+            ? retryMs
+            : Date.now() + 3600000,
+        );
+        const error = new Error(
+          `GitHub: limite de consultas atingido (HTTP ${r.status}). Consultas pausadas até ${new Date(until).toISOString()}.`,
+        );
+        error.code = "GITHUB_RATE_LIMIT";
+        error.retryAt = new Date(until)
+          .toISOString()
+          .replace("T", " ")
+          .slice(0, 19);
+        throw error;
+      }
+      throw new Error(
+        "GitHub recusou acesso (HTTP 403), sem confirmação de limite nos cabeçalhos. Nova tentativa após seis horas.",
+      );
+    }
+    throw new Error(`Fonte retornou HTTP ${r.status}.`);
+  }
   const reader = r.body.getReader();
   let chunks = [],
     size = 0;
@@ -141,13 +179,21 @@ export async function discover(env, source, config) {
       description: j.content,
     }));
   } else if (source.kind === "lever") {
+    const skip = Math.max(0, Number(source.cursor) || 0);
+    const query = new URLSearchParams({
+      mode: "json",
+      skip: String(skip),
+      limit: "100",
+    });
+    if (source.location_filter) query.set("location", source.location_filter);
     const d = JSON.parse(
-      await fetchText(`https://api.lever.co/v0/postings/${slug}?mode=json`),
+      await fetchText(`https://api.lever.co/v0/postings/${slug}?${query}`),
     );
+    nextCursor = d.length === 100 ? skip + 100 : 0;
     jobs = d.map((j) => ({
       title: j.text,
       company: source.value,
-      location: j.categories?.location,
+      location: workplaceLocation(j, j.categories?.location),
       url: j.applyUrl || j.hostedUrl,
       description: [
         j.descriptionPlain,
@@ -164,7 +210,7 @@ export async function discover(env, source, config) {
       .map((j) => ({
         title: j.title,
         company: source.value,
-        location: j.location,
+        location: workplaceLocation(j, j.location),
         url: j.applyUrl || j.jobUrl,
         description: j.descriptionPlain || j.descriptionHtml,
       }));
@@ -198,7 +244,7 @@ export async function discover(env, source, config) {
       );
   }
   const stats = { received: jobs.length };
-  if (["greenhouse", "lever", "ashby"].includes(source.kind)) {
+  if (["greenhouse", "ashby"].includes(source.kind)) {
     const window = sourceWindow(jobs, source.cursor);
     jobs = window.jobs;
     nextCursor = window.cursor;
@@ -232,6 +278,7 @@ export async function saveJobs(env, source, config, jobs, stats = {}) {
     invalid: 0,
     filtered: 0,
     matched: 0,
+    reasons: {},
   });
   for (const j of jobs.slice(0, 300)) {
     stats.scanned++;
@@ -241,8 +288,10 @@ export async function saveJobs(env, source, config, jobs, stats = {}) {
       stats.invalid++;
       continue;
     }
-    if (!triageJob(j, config).pass) {
+    const verdict = triageJob(j, config);
+    if (!verdict.pass) {
       stats.filtered++;
+      stats.reasons[verdict.reason] = (stats.reasons[verdict.reason] || 0) + 1;
       continue;
     }
     try {
@@ -273,7 +322,11 @@ export async function saveJobs(env, source, config, jobs, stats = {}) {
   await event(
     env,
     "discovery",
-    `${source.kind}/${source.value}: ${stats.received} recebidas, ${stats.scanned} examinadas, ${stats.filtered} fora das preferências, ${stats.invalid} incompletas, ${stats.duplicates} já cadastradas, ${saved} novas.`,
+    `${source.kind}/${source.value}: ${stats.received} recebidas, ${stats.scanned} examinadas, ${stats.filtered} fora das preferências, ${stats.invalid} incompletas, ${stats.duplicates} já cadastradas, ${saved} novas. ${Object.entries(
+      stats.reasons,
+    )
+      .map(([reason, n]) => `${n}: ${reason}`)
+      .join(" ")}`,
   );
   return saved;
 }

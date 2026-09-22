@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
 import { countryOptions, countrySelection } from "./countries.js";
+import { managementSearch } from "../src/roles.js";
 const labels = {
   discovered: "Aguardando análise",
   filtered: "Fora das preferências",
@@ -722,9 +723,9 @@ function Profile({ data, api, act, busy }) {
               placeholder="Ex.: Scrum Master, Gerente de projetos, Project Manager"
             />
             <small>
-              Opcional. O título precisa conter um dos cargos informados. Inclua
-              variações em inglês quando desejar. As competências são avaliadas
-              separadamente.
+              Opcional. O título precisa corresponder a um dos cargos
+              informados. Variações conhecidas em português e inglês são
+              reconhecidas. As competências são avaliadas separadamente.
             </small>
           </label>
           <label>
@@ -1042,6 +1043,13 @@ function Sources({ data, api, act, busy }) {
       <LinkedInCloudPanel api={api} act={act} busy={busy} />
       <section className="panel">
         <h2>Catálogo de fontes</h2>
+        {managementSearch(data.config) && (
+          <p>
+            <strong>Busca de projetos e agilidade:</strong> as comunidades
+            especializadas em desenvolvimento ficam fora dos lotes deste perfil.
+            Fontes corporativas continuam em rodízio.
+          </p>
+        )}
         <p>
           Adicione páginas de empresas em plataformas de recrutamento ou páginas
           individuais de vagas com dados estruturados. O catálogo suporta até
@@ -1279,6 +1287,11 @@ function Sources({ data, api, act, busy }) {
                         {m.received} recebidas · {m.scanned} examinadas ·{" "}
                         {m.filtered} fora das preferências · {m.duplicates} já
                         cadastradas · <strong>{m.saved} novas</strong>
+                        {Object.entries(m.reasons || {}).map(([reason, n]) => (
+                          <span key={reason} style={{ display: "block" }}>
+                            {n} — {reason}
+                          </span>
+                        ))}
                       </p>
                     );
                   })()}

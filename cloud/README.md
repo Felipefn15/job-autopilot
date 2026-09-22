@@ -21,6 +21,16 @@ Private single-user application: React dashboard, Cloudflare Worker, D1 and Clou
 
 ## Deliberate operational limits
 
+### Profile-aware sources (migration 0006)
+
+Apply `npm run db:remote` before deployment. This migration expands the catalog to 82 entries (21 marked BR), tags the nine development GitHub communities and frontend Telegram channel as `software`, and adds six corporate/general boards. Management-only searches (based on configured target roles, or management-only keywords) exclude those software communities from selection without disabling them globally. Mixed or developer searches retain them. Other corporate sources continue rotating; their inclusion is not proof that matching roles are available today.
+
+Known Portuguese/English project-role equivalents are recognized (Gerente de Projetos / Project Manager; Analista de Projetos / Project Analyst), without equating Product Manager to Project Manager. Cloud LinkedIn queries also expand known target roles. Ashby and Lever workplace metadata are included in the saved location, so explicit remote flags are no longer lost before triage; hybrid/onsite flags take precedence over conflicting remote booleans. Reports include counts by first exclusion reason. Existing stored jobs are retriaged under version 2; complete eligibility is still decided by the LLM.
+
+Lever collection uses API pagination in windows of 100; migration 0006 resets Lever cursors. The Jobgether source requests the exact location `Brazil`, as observed in its public board, rather than downloading the full worldwide catalog. This is a source-level filter; all the owner's job preferences still apply. Pagination can delay discovery of new postings until the relevant page is revisited.
+
+GitHub HTTP 403 alone does not prove rate limiting. When response headers confirm a quota limit (or HTTP 429), all GitHub sources pause until the advertised reset/retry time, with a one-hour fallback. The remainder of the current GitHub batch is skipped. Other 403 errors are identified as unconfirmed access failures and retain the six-hour source backoff. No credential or blocking workaround is added.
+
 ### Preference triage (migration 0005)
 
 Apply `npm run db:remote` before deploying this update. New jobs from ATS, communities and both LinkedIn collectors are prefiltered before entering the analysis queue. Remote-only rejects explicit hybrid/on-site arrangements and advertisements without remote evidence. Generic skills (such as Scrum and project management) cannot qualify unrelated developer titles by appearing anywhere in the description. If specific skills are present, at least one specific term must match with word boundaries. When only generic skills are supplied, the title must match the corresponding role terms; the optional `targetRoles` preference lets the owner specify desired titles directly, including language variants. LinkedIn searches prefer those role terms when provided.

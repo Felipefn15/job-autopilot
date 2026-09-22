@@ -154,6 +154,7 @@ export async function tick(env, manual = false, applyId = null) {
     const selected = selectSources(
       sources.results,
       config.sourceFocus || "brasil",
+      config,
     );
     if (!selected.length)
       await event(
@@ -161,13 +162,29 @@ export async function tick(env, manual = false, applyId = null) {
         "discovery_idle",
         "Nenhuma fonte disponível agora. As fontes são consultadas em rodízio a cada duas horas; falhas aguardam seis horas.",
       );
+    let githubPaused = false;
     for (const source of selected) {
+      if (githubPaused && source.kind === "github") continue;
       let error = null;
       try {
         await discover(env, source, config);
       } catch (e) {
         error = e.message;
         await event(env, "source_error", `${source.value}: ${error}`);
+        if (e.code === "GITHUB_RATE_LIMIT") {
+          githubPaused = true;
+          await env.DB.prepare(
+            "UPDATE sources SET retry_after=? WHERE kind='github'",
+          )
+            .bind(e.retryAt)
+            .run();
+          await env.DB.prepare(
+            "UPDATE sources SET checked_at=CURRENT_TIMESTAMP,error=? WHERE id=?",
+          )
+            .bind(error, source.id)
+            .run();
+          continue;
+        }
       }
       await env.DB.prepare(
         "UPDATE sources SET checked_at=CURRENT_TIMESTAMP,error=?,retry_after=CASE WHEN ? IS NULL THEN NULL ELSE datetime('now','+6 hours') END WHERE id=?",

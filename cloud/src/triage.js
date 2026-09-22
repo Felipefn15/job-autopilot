@@ -1,4 +1,5 @@
 import { cleanText, digest } from "./core.js";
+import { expandedRoles, normalizeRole } from "./roles.js";
 const normal = (value) =>
   cleanText(value)
     .normalize("NFD")
@@ -84,8 +85,8 @@ export function triageJob(job, config) {
         reason: "Excluída: trabalho remoto não confirmado no anúncio.",
       };
   }
-  const roles = split(config.targetRoles);
-  if (roles.length && !roles.some((role) => has(title, role)))
+  const roles = expandedRoles(config.targetRoles);
+  if (roles.length && !roles.some((role) => has(normalizeRole(title), role)))
     return {
       pass: false,
       reason: "Excluída: título fora dos cargos de interesse.",
@@ -116,7 +117,7 @@ export function triageJob(job, config) {
 export async function triageKey(config) {
   return digest(
     JSON.stringify([
-      "triage-v1",
+      "triage-v2",
       config.keywords || "",
       config.targetRoles || "",
       !!config.remoteOnly,

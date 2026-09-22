@@ -1,4 +1,5 @@
 import { cleanText } from "./core.js";
+import { managementSearch } from "./roles.js";
 export function githubJobs(items, repo, now = Date.now()) {
   if (!Array.isArray(items))
     throw new Error("Resposta inválida da comunidade GitHub.");
@@ -62,13 +63,15 @@ export async function telegramJobs(html, channel) {
     .filter((j) => Date.parse(j.date) >= Date.now() - 90 * 86400000)
     .map((j) => ({ ...j, title: cleanText(j.description).slice(0, 180) }));
 }
-export function selectSources(rows, focus = "brasil") {
-  const sorted = [...rows].sort(
-    (a, b) =>
-      String(a.checked_at || "").localeCompare(String(b.checked_at || "")) ||
-      (a.priority ?? 50) - (b.priority ?? 50) ||
-      a.id.localeCompare(b.id),
-  );
+export function selectSources(rows, focus = "brasil", config = {}) {
+  const sorted = rows
+    .filter((s) => !managementSearch(config) || s.audience !== "software")
+    .sort(
+      (a, b) =>
+        String(a.checked_at || "").localeCompare(String(b.checked_at || "")) ||
+        (a.priority ?? 50) - (b.priority ?? 50) ||
+        a.id.localeCompare(b.id),
+    );
   if (focus === "global") return sorted.slice(0, 5);
   const selected = [
     ...sorted.filter((s) => s.region === "BR").slice(0, 4),

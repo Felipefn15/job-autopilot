@@ -1,5 +1,22 @@
 # Initial career references
 
+## Project and corporate source expansion — 2026-09-22
+
+Migration 0006 adds the boards below (82 total references, 21 marked BR). Jobgether's public page listed a remote Scrum Master/Project Manager role based in Brazil at research time; that is evidence of source relevance, not candidate fit or guaranteed future availability. Some board roots could not be fetched by the research tool; indexed primary-source postings were used to identify Linx, Arco and Bluelight. Actual API availability must be observed in the deployed app.
+
+| Connector | Reference | Scope |
+| --- | --- | --- |
+| Lever | [Jobgether](https://jobs.lever.co/jobgether) | API location filter `Brazil` |
+| Lever | [Bluelight Consulting](https://jobs.lever.co/bluelightconsulting) | Corporate board with Brazil/LATAM postings |
+| Greenhouse | [ília](https://job-boards.greenhouse.io/ilia) | Brazilian corporate board |
+| Greenhouse | [Linx](https://job-boards.greenhouse.io/linx) | Brazilian corporate board |
+| Greenhouse | [OLIVER Brasil](https://job-boards.greenhouse.io/oliverbrazil) | Brazilian corporate board |
+| Greenhouse | [Arco Educação](https://job-boards.greenhouse.io/arcoeducacao) | Brazilian corporate board |
+
+Relevant primary-source example: [Scrum Master/Project Manager — Brazil, remote](https://jobs.lever.co/jobgether/79faffa8-4d40-4ced-b6d5-a2d6cb4c3578). It is a senior role and must be evaluated against the confirmed resume before any application.
+
+Connector references: [Lever pagination](https://github.com/lever/postings-api), [Ashby workplace fields](https://developers.ashbyhq.com/docs/public-job-posting-api), [GitHub API rate limits and errors](https://docs.github.com/en/rest/using-the-rest-api/troubleshooting-the-rest-api).
+
 ## Brazilian expansion — 2026-09-22
 
 Migration 0004 adds the ten references below, bringing the catalog to 76. Together with the existing Nubank, QuintoAndar, Gympass, Stone and CI&T boards, 15 sources receive Brazilian priority. Communities are discovery channels, not a guarantee that every post is current or a good match. No sample vacancies are inserted.
