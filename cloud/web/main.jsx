@@ -700,6 +700,20 @@ function Profile({ data, api, act, busy }) {
             </small>
           </label>
           <label>
+            Prioridade das fontes
+            <select
+              value={config.sourceFocus || "brasil"}
+              onChange={(e) => update("sourceFocus", e.target.value)}
+            >
+              <option value="brasil">Brasil primeiro</option>
+              <option value="global">Todas as regiões por igual</option>
+            </select>
+            <small>
+              A prioridade de coleta é independente do país escolhido para as
+              vagas.
+            </small>
+          </label>
+          <label>
             Pontuação mínima
             <input
               type="number"
@@ -794,11 +808,14 @@ function Profile({ data, api, act, busy }) {
 function Sources({ data, api, act, busy }) {
   const [post, setPost] = useState({ url: "", text: "", title: "" });
   const [sourceFilter, setSourceFilter] = useState("");
+  const [region, setRegion] = useState("BR");
   const sourceLink = (s) =>
     (({
       greenhouse: "https://job-boards.greenhouse.io/",
       lever: "https://jobs.lever.co/",
       ashby: "https://jobs.ashbyhq.com/",
+      github: "https://github.com/",
+      telegram: "https://t.me/s/",
     })[s.kind] || "") + s.value;
   const [kind, setKind] = useState("greenhouse"),
     [value, setValue] = useState(""),
@@ -821,6 +838,15 @@ function Sources({ data, api, act, busy }) {
       v = u.pathname.split("/")[1];
     } else if (/^(www\.)?linkedin\.com$/.test(u.hostname)) {
       k = "linkedin";
+    } else if (u.hostname === "github.com") {
+      k = "github";
+      v = u.pathname.split("/").filter(Boolean).slice(0, 2).join("/");
+    } else if (u.hostname === "t.me") {
+      k = "telegram";
+      v = u.pathname
+        .split("/")
+        .filter(Boolean)
+        .filter((s) => s !== "s")[0];
     }
     return { kind: k, value: v };
   }
@@ -832,7 +858,8 @@ function Sources({ data, api, act, busy }) {
           Adicione páginas de empresas em plataformas de recrutamento ou páginas
           individuais de vagas com dados estruturados. O catálogo suporta até
           2.000 fontes; cada lote consulta até cinco fontes, priorizando as
-          ainda não consultadas.
+          brasileiras por padrão (até quatro brasileiras e uma global, conforme
+          disponibilidade).
         </p>
         <p>
           <strong>{data.sources.length} fontes cadastradas</strong> ·{" "}
@@ -845,12 +872,22 @@ function Sources({ data, api, act, busy }) {
           as vagas são verificadas durante cada consulta; uma referência
           cadastrada não significa uma vaga compatível.
         </p>
+        <label>
+          Região das novas fontes
+          <select value={region} onChange={(e) => setRegion(e.target.value)}>
+            <option value="BR">Brasil</option>
+            <option value="global">Global / outras regiões</option>
+          </select>
+        </label>
         <form
           className="source-form"
           onSubmit={(e) => {
             e.preventDefault();
             act(async () => {
-              await api("sources", "POST", { sources: [{ kind, value }] });
+              await api("sources", "POST", {
+                sources: [{ kind, value }],
+                region,
+              });
               setValue("");
             }, "Fonte adicionada.");
           }}
@@ -863,12 +900,18 @@ function Sources({ data, api, act, busy }) {
               <option value="ashby">Ashby</option>
               <option value="page">Página de vaga</option>
               <option value="linkedin">Post público do LinkedIn</option>
+              <option value="github">Comunidade GitHub</option>
+              <option value="telegram">Canal público Telegram</option>
             </select>
           </label>
           <label>
             {["page", "linkedin"].includes(kind)
               ? "URL HTTPS"
-              : "Identificador da empresa"}
+              : kind === "github"
+                ? "Organização/repositório"
+                : kind === "telegram"
+                  ? "Nome do canal público"
+                  : "Identificador da empresa"}
             <input
               value={value}
               onChange={(e) => setValue(e.target.value)}
@@ -889,6 +932,7 @@ function Sources({ data, api, act, busy }) {
               e.preventDefault();
               act(async () => {
                 await api("sources", "POST", {
+                  region,
                   sources: bulk
                     .split("\n")
                     .map((s) => s.trim())
@@ -911,6 +955,45 @@ function Sources({ data, api, act, busy }) {
             <button disabled={busy}>Importar fontes</button>
           </form>
         </details>
+      </section>
+      <section className="panel">
+        <h2>Busca LinkedIn com sessão autenticada</h2>
+        <p>
+          O coletor usa Chromium no seu computador, mantém a sessão local e
+          envia os posts encontrados para este painel. Ele busca usando as
+          tecnologias e a região das preferências.
+        </p>
+        <p>
+          <strong>Último registro:</strong>{" "}
+          {data.collector
+            ? `${data.collector.detail} (${data.collector.created_at} UTC)`
+            : "Nenhuma execução registrada."}
+        </p>
+        <p>
+          O registro não confirma que o coletor continua conectado. O computador
+          e o processo precisam permanecer ligados.
+        </p>
+        <a
+          href="https://github.com/Felipefn15/job-autopilot/blob/main/collector/README.md"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Instalar ou reutilizar a sessão anterior
+        </a>
+        <p>
+          <code>python linkedin_collector.py run</code> — uma coleta
+        </p>
+        <p>
+          <code>python linkedin_collector.py watch</code> — coleta periódica,
+          com agendamento habilitado nas preferências
+        </p>
+        <button
+          className="secondary"
+          disabled={busy}
+          onClick={() => act(async () => {})}
+        >
+          Atualizar registro do coletor
+        </button>
       </section>
       <section className="panel">
         <h2>Importar post do LinkedIn</h2>
@@ -994,12 +1077,23 @@ function Sources({ data, api, act, busy }) {
                   </a>
                 </p>
                 <p>
-                  {s.kind} ·{" "}
+                  {s.kind} · {s.region === "BR" ? "Brasil" : "Global"} ·{" "}
                   {s.checked_at
                     ? "Última consulta: " + s.checked_at
                     : "Ainda não consultada"}
                 </p>
                 {s.error && <p className="error">{s.error}</p>}
+                {s.last_stats &&
+                  (() => {
+                    const m = JSON.parse(s.last_stats);
+                    return (
+                      <p>
+                        {m.received} recebidas · {m.scanned} examinadas ·{" "}
+                        {m.filtered} fora dos termos · {m.duplicates} já
+                        cadastradas · <strong>{m.saved} novas</strong>
+                      </p>
+                    );
+                  })()}
               </div>
               <button
                 className="secondary"

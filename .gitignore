@@ -74,4 +74,4 @@ node_modules/
 !.dev.vars.example
 *.pdf
 do_not_contact.txt
-
+collector/.venv/

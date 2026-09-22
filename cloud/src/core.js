@@ -96,6 +96,7 @@ export function validateSettings(input) {
     if (typeof v === "string" && k.length < 100) facts[k] = v.slice(0, 2000);
   return {
     country,
+    sourceFocus: input.sourceFocus === "global" ? "global" : "brasil",
     minScore,
     dailyApplications,
     remoteOnly: input.remoteOnly === true,

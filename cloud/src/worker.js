@@ -57,22 +57,26 @@ export default {
       return json({ error: "Origem não permitida." }, 403);
     try {
       if (url.pathname === "/api/state" && req.method === "GET") {
-        const [config, p, sources, jobs, events, usage] = await Promise.all([
-          settings(env),
-          profile(env),
-          env.DB.prepare(
-            "SELECT * FROM sources ORDER BY value LIMIT 2000",
-          ).all(),
-          env.DB.prepare(
-            "SELECT id,title,company,location,url,status,score,analysis,draft,proof,created_at FROM jobs ORDER BY created_at DESC LIMIT 200",
-          ).all(),
-          env.DB.prepare(
-            "SELECT * FROM events ORDER BY id DESC LIMIT 30",
-          ).all(),
-          env.DB.prepare(
-            "SELECT kind,count FROM usage WHERE day=date('now')",
-          ).all(),
-        ]);
+        const [config, p, sources, jobs, events, usage, collector] =
+          await Promise.all([
+            settings(env),
+            profile(env),
+            env.DB.prepare(
+              "SELECT * FROM sources ORDER BY value LIMIT 2000",
+            ).all(),
+            env.DB.prepare(
+              "SELECT id,title,company,location,url,status,score,analysis,draft,proof,created_at FROM jobs ORDER BY created_at DESC LIMIT 200",
+            ).all(),
+            env.DB.prepare(
+              "SELECT * FROM events ORDER BY id DESC LIMIT 30",
+            ).all(),
+            env.DB.prepare(
+              "SELECT kind,count FROM usage WHERE day=date('now')",
+            ).all(),
+            env.DB.prepare(
+              "SELECT detail,created_at FROM events WHERE kind='linkedin_collector' ORDER BY id DESC LIMIT 1",
+            ).first(),
+          ]);
         return json({
           config,
           profile: p
@@ -87,6 +91,7 @@ export default {
           jobs: jobs.results,
           events: events.results,
           usage: usage.results,
+          collector,
           capabilities: {
             ai: !!(env.GEMINI_API_KEY || env.GROQ_API_KEY),
             email: emailConfigured(env),
@@ -183,6 +188,41 @@ export default {
           return json({ ok: true });
         });
       }
+      if (
+        url.pathname === "/api/linkedin/collector-config" &&
+        req.method === "GET"
+      ) {
+        const config = await settings(env),
+          p = await profile(env);
+        return json({ config, confirmed: !!p?.confirmed });
+      }
+      if (
+        url.pathname === "/api/linkedin/collector-status" &&
+        req.method === "POST"
+      ) {
+        const input = await body(req);
+        const labels = {
+          running: "Coleta local iniciada",
+          completed: "Coleta local concluída",
+          no_results:
+            "Coleta local sem posts legíveis; verifique os termos ou o layout do LinkedIn",
+          login_required:
+            "Coletor local precisa de login ou verificação no navegador",
+          error: "Coletor local interrompido; consulte o terminal",
+          paused: "Coletor local pausado pelo agendamento",
+        };
+        if (!Object.hasOwn(labels, input.state))
+          throw new Error("Estado de coletor inválido.");
+        const count = Number(input.count || 0);
+        if (!Number.isInteger(count) || count < 0 || count > 100)
+          throw new Error("Contagem inválida.");
+        await event(
+          env,
+          "linkedin_collector",
+          `${labels[input.state]}. ${count} novos posts.`,
+        );
+        return json({ ok: true });
+      }
       if (url.pathname === "/api/linkedin/import" && req.method === "POST") {
         const input = await body(req);
         const postUrl = linkedinUrl(input.url);
@@ -225,8 +265,13 @@ export default {
         for (const s of specs)
           statements.push(
             env.DB.prepare(
-              "INSERT OR IGNORE INTO sources(id,kind,value) VALUES(?,?,?)",
-            ).bind(await digest(s.kind + ":" + s.value), s.kind, s.value),
+              "INSERT OR IGNORE INTO sources(id,kind,value,region) VALUES(?,?,?,?)",
+            ).bind(
+              await digest(s.kind + ":" + s.value),
+              s.kind,
+              s.value,
+              input.region === "BR" ? "BR" : "global",
+            ),
           );
         await env.DB.batch(statements);
         return json({ ok: true });

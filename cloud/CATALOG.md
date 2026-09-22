@@ -1,5 +1,28 @@
 # Initial career references
 
+## Brazilian expansion — 2026-09-22
+
+Migration 0004 adds the ten references below, bringing the catalog to 76. Together with the existing Nubank, QuintoAndar, Gympass, Stone and CI&T boards, 15 sources receive Brazilian priority. Communities are discovery channels, not a guarantee that every post is current or a good match. No sample vacancies are inserted.
+
+| Connector | Reference |
+| --- | --- |
+| GitHub issues | [FrontendBR](https://github.com/frontendbr/vagas) |
+| GitHub issues | [Backend Brasil](https://github.com/backend-br/vagas) |
+| GitHub issues | [React Brasil](https://github.com/react-brasil/vagas) |
+| GitHub issues | [Node.js](https://github.com/nodejsdevbr/vagas) |
+| GitHub issues | [Python](https://github.com/pydevbr/vagas) |
+| GitHub issues | [PHP](https://github.com/phpdevbr/vagas) |
+| GitHub issues | [.NET](https://github.com/dotnetdevbr/vagas) |
+| GitHub issues | [Vue.js Brasil](https://github.com/vuejs-br/vagas) |
+| GitHub issues | [QA Brasil](https://github.com/qa-brasil/vagas) |
+| Telegram public preview | [Frontend Brasil Vagas](https://t.me/s/frontendbrasilvagas) |
+
+Repository pages and a public Telegram preview were checked during research. Runtime collection, account rate limits and vacancy counts must be observed after deployment. The Telegram preview is a recent slice, not the complete channel history. GitHub and Telegram may repeat the same announcement; URL deduplication does not merge distinct cross-post URLs. API reference: [GitHub repository issues](https://docs.github.com/en/rest/issues/issues#list-repository-issues).
+
+Gupy and other Brazilian job sites remain expansion candidates; this release does not claim a working Gupy connector. Authenticated LinkedIn searches use the [local collector](../collector/README.md). Private chats are not accessed.
+
+## Original catalog
+
 66 reference pages identified on 2026-09-21 using public page titles, redirects or search results. This verifies the reference page identity, **not** every API endpoint, current vacancy count or eligibility. Some pages require JavaScript. The application records actual connector results and errors on each run. No sample vacancies are inserted.
 
 Sources: [Ashby API](https://developers.ashbyhq.com/docs/public-job-posting-api), [LinkedIn Posts API permissions](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api).

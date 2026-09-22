@@ -10,6 +10,7 @@ import {
 import { ai } from "./ai.js";
 import { validateAnalysis, validateDraft, verifiedEmail } from "./core.js";
 import { discover } from "./discovery.js";
+import { selectSources } from "./community.js";
 import { sendEmail, emailConfigured } from "./email.js";
 import { browserApply } from "./browser.js";
 export async function analyze(env, job, p, config) {
@@ -52,12 +53,17 @@ export async function apply(env, id, p, config) {
   if (!job || job.status !== "matched" || job.profile_id !== p.id)
     throw new Error("Candidatura não está pronta para este currículo.");
   if (!p.confirmed) throw new Error("Confirme o perfil extraído do currículo.");
-  if (!job.email && new URL(job.url).hostname.endsWith("linkedin.com")) {
+  if (
+    !job.email &&
+    ["linkedin.com", "www.linkedin.com", "github.com", "t.me"].includes(
+      new URL(job.url).hostname,
+    )
+  ) {
     await status(
       env,
       id,
       "needs_input",
-      "Post LinkedIn sem candidatura por e-mail verificada. Abra o post e siga o link de candidatura manualmente.",
+      "Post de comunidade sem candidatura por e-mail verificada. Abra o anúncio e siga o link de candidatura manualmente.",
     );
     return;
   }
@@ -134,9 +140,19 @@ export async function tick(env, manual = false, applyId = null) {
       return;
     }
     const sources = await env.DB.prepare(
-      "SELECT * FROM sources WHERE enabled=1 AND (checked_at IS NULL OR checked_at < datetime('now','-6 hours')) ORDER BY checked_at ASC,id LIMIT 5",
+      "SELECT * FROM sources WHERE enabled=1 AND (retry_after IS NULL OR retry_after <= CURRENT_TIMESTAMP) AND (checked_at IS NULL OR checked_at < datetime('now','-2 hours')) ORDER BY checked_at ASC,id LIMIT 2000",
     ).all();
-    for (const source of sources.results) {
+    const selected = selectSources(
+      sources.results,
+      config.sourceFocus || "brasil",
+    );
+    if (!selected.length)
+      await event(
+        env,
+        "discovery_idle",
+        "Nenhuma fonte disponível agora. As fontes são consultadas em rodízio a cada duas horas; falhas aguardam seis horas.",
+      );
+    for (const source of selected) {
       let error = null;
       try {
         await discover(env, source, config);
@@ -145,9 +161,9 @@ export async function tick(env, manual = false, applyId = null) {
         await event(env, "source_error", `${source.value}: ${error}`);
       }
       await env.DB.prepare(
-        "UPDATE sources SET checked_at=CURRENT_TIMESTAMP,error=? WHERE id=?",
+        "UPDATE sources SET checked_at=CURRENT_TIMESTAMP,error=?,retry_after=CASE WHEN ? IS NULL THEN NULL ELSE datetime('now','+6 hours') END WHERE id=?",
       )
-        .bind(error, source.id)
+        .bind(error, error, source.id)
         .run();
     }
     const job = await env.DB.prepare(

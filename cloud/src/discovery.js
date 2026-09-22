@@ -1,16 +1,34 @@
 import { publicUrl, cleanText, digest, LIMITS } from "./core.js";
 import { event } from "./db.js";
+import { githubJobs, telegramJobs, sourceWindow } from "./community.js";
 import { linkedinUrl, parseLinkedinPost, linkedinJob } from "./linkedin.js";
 export function sourceSpec(kind, value) {
-  if (!["greenhouse", "lever", "ashby", "page", "linkedin"].includes(kind))
+  if (
+    ![
+      "greenhouse",
+      "lever",
+      "ashby",
+      "page",
+      "linkedin",
+      "github",
+      "telegram",
+    ].includes(kind)
+  )
     throw new Error("Fonte não suportada.");
   if (kind === "page") return { kind, value: publicUrl(value) };
   if (kind === "linkedin") return { kind, value: linkedinUrl(value) };
+  if (kind === "github") {
+    if (!/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+$/.test(value))
+      throw new Error("Use organização/repositório do GitHub.");
+    return { kind, value: value.toLowerCase() };
+  }
+  if (kind === "telegram" && !/^[a-zA-Z][a-zA-Z0-9_]{4,31}$/.test(value))
+    throw new Error("Use o nome de um canal público do Telegram.");
   if (!/^[a-zA-Z0-9_-]{1,100}$/.test(value))
     throw new Error("Use o identificador da empresa no ATS.");
   return { kind, value };
 }
-export async function fetchText(url, max = 2000000) {
+export async function fetchText(url, max = 12000000) {
   const u = publicUrl(url);
   const r = await fetch(u, {
     headers: {
@@ -32,7 +50,9 @@ export async function fetchText(url, max = 2000000) {
     size += value.length;
     if (size > max) {
       await reader.cancel();
-      throw new Error("Fonte excede limite de tamanho.");
+      throw new Error(
+        `Fonte excede o limite de ${Math.round(max / 1000000)} MB. A consulta foi interrompida sem perder as vagas já salvas.`,
+      );
     }
     chunks.push(value);
   }
@@ -84,8 +104,29 @@ export function parseStructuredJobs(html, base) {
 }
 export async function discover(env, source, config) {
   let jobs = [];
+  let nextCursor = 0;
   const slug = encodeURIComponent(source.value);
-  if (source.kind === "greenhouse") {
+  if (source.kind === "github") {
+    const repo = sourceSpec("github", source.value).value;
+    const page = Math.max(1, Math.min(10, Number(source.cursor) || 1));
+    const fetchPage = async (p) =>
+      JSON.parse(
+        await fetchText(
+          `https://api.github.com/repos/${repo}/issues?state=open&sort=created&direction=desc&per_page=50&page=${p}`,
+          4000000,
+        ),
+      );
+    const newest = await fetchPage(1);
+    const older = page > 1 ? await fetchPage(page) : newest;
+    jobs = githubJobs(page > 1 ? [...newest, ...older] : newest, repo);
+    jobs = [...new Map(jobs.map((j) => [j.url, j])).values()];
+    nextCursor = older.length === 50 && page < 10 ? page + 1 : 1;
+  } else if (source.kind === "telegram") {
+    jobs = await telegramJobs(
+      await fetchText(`https://t.me/s/${source.value}`, 4000000),
+      source.value,
+    );
+  } else if (source.kind === "greenhouse") {
     const d = JSON.parse(
       await fetchText(
         `https://boards-api.greenhouse.io/v1/boards/${slug}/jobs?content=true`,
@@ -155,10 +196,20 @@ export async function discover(env, source, config) {
         "Página sem JobPosting estruturado. Cadastre a página individual da vaga ou um ATS.",
       );
   }
-  return saveJobs(env, source, config, jobs);
+  const stats = { received: jobs.length };
+  if (["greenhouse", "lever", "ashby"].includes(source.kind)) {
+    const window = sourceWindow(jobs, source.cursor);
+    jobs = window.jobs;
+    nextCursor = window.cursor;
+  }
+  const saved = await saveJobs(env, source, config, jobs, stats);
+  await env.DB.prepare("UPDATE sources SET cursor=?,last_stats=? WHERE id=?")
+    .bind(nextCursor, JSON.stringify(stats), source.id)
+    .run();
+  return saved;
 }
 
-export async function saveJobs(env, source, config, jobs) {
+export async function saveJobs(env, source, config, jobs, stats = {}) {
   let saved = 0;
   let pending = [],
     bytes = 2;
@@ -178,22 +229,37 @@ export async function saveJobs(env, source, config, jobs) {
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
+  Object.assign(stats, {
+    received: stats.received ?? jobs.length,
+    scanned: 0,
+    invalid: 0,
+    filtered: 0,
+    matched: 0,
+  });
   for (const j of jobs.slice(0, 300)) {
+    stats.scanned++;
     j.description = cleanText(j.description).slice(0, LIMITS.description);
     j.title = cleanText(j.title).slice(0, 300);
-    if (!j.title || j.description.length < 80) continue;
+    if (!j.title || j.description.length < 80) {
+      stats.invalid++;
+      continue;
+    }
     if (
       keys.length &&
       !keys.some((k) =>
         (j.title + " " + j.description).toLowerCase().includes(k),
       )
-    )
+    ) {
+      stats.filtered++;
       continue;
+    }
     try {
       j.url = publicUrl(j.url);
     } catch {
+      stats.invalid++;
       continue;
     }
+    stats.matched++;
     const id = await digest(j.url);
     const row = {
       id,
@@ -210,10 +276,12 @@ export async function saveJobs(env, source, config, jobs) {
     bytes += size;
   }
   await flush();
+  stats.saved = saved;
+  stats.duplicates = stats.matched - saved;
   await event(
     env,
     "discovery",
-    `${source.kind}/${source.value}: ${saved} vagas novas.`,
+    `${source.kind}/${source.value}: ${stats.received} recebidas, ${stats.scanned} examinadas, ${stats.filtered} fora dos termos, ${stats.invalid} incompletas, ${stats.duplicates} já cadastradas, ${saved} novas.`,
   );
   return saved;
 }
