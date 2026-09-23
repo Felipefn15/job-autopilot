@@ -233,6 +233,7 @@ function JobCatalog({ view, api, revision }) {
           >
             <option value="">Todas as fontes</option>
             {[
+              "gupy",
               "greenhouse",
               "lever",
               "ashby",
@@ -1538,18 +1539,20 @@ function Sources({ data, api, act, busy }) {
   const [sourceFilter, setSourceFilter] = useState("");
   const [region, setRegion] = useState("BR");
   const sourceLink = (s) =>
-    s.kind === "remotive"
-      ? "https://remotive.com"
-      : s.kind === "remoteok"
-        ? "https://remoteok.com"
-        : ({
-            greenhouse: "https://job-boards.greenhouse.io/",
-            lever: "https://jobs.lever.co/",
-            ashby: "https://jobs.ashbyhq.com/",
-            smartrecruiters: "https://careers.smartrecruiters.com/",
-            github: "https://github.com/",
-            telegram: "https://t.me/s/",
-          }[s.kind] || "") + s.value;
+    s.kind === "gupy"
+      ? "https://portal.gupy.io"
+      : s.kind === "remotive"
+        ? "https://remotive.com"
+        : s.kind === "remoteok"
+          ? "https://remoteok.com"
+          : ({
+              greenhouse: "https://job-boards.greenhouse.io/",
+              lever: "https://jobs.lever.co/",
+              ashby: "https://jobs.ashbyhq.com/",
+              smartrecruiters: "https://careers.smartrecruiters.com/",
+              github: "https://github.com/",
+              telegram: "https://t.me/s/",
+            }[s.kind] || "") + s.value;
   const [kind, setKind] = useState("greenhouse"),
     [value, setValue] = useState(""),
     [bulk, setBulk] = useState("");
@@ -1647,6 +1650,7 @@ function Sources({ data, api, act, busy }) {
               <option value="lever">Lever</option>
               <option value="ashby">Ashby</option>
               <option value="smartrecruiters">SmartRecruiters</option>
+              <option value="gupy">Gupy · busca por cargo</option>
               <option value="remotive">Remotive</option>
               <option value="remoteok">Remote OK</option>
               <option value="page">Página de vaga</option>
@@ -1656,15 +1660,20 @@ function Sources({ data, api, act, busy }) {
             </select>
           </label>
           <label>
-            {["page", "linkedin"].includes(kind)
-              ? "URL HTTPS"
-              : kind === "github"
-                ? "Organização/repositório"
-                : kind === "telegram"
-                  ? "Nome do canal público"
-                  : "Identificador da empresa"}
+            {["gupy", "remotive", "remoteok"].includes(kind)
+              ? "Catálogo de várias empresas"
+              : ["page", "linkedin"].includes(kind)
+                ? "URL HTTPS"
+                : kind === "github"
+                  ? "Organização/repositório"
+                  : kind === "telegram"
+                    ? "Nome do canal público"
+                    : "Identificador da empresa"}
             <input
-              value={value}
+              value={
+                ["gupy", "remotive", "remoteok"].includes(kind) ? kind : value
+              }
+              disabled={["gupy", "remotive", "remoteok"].includes(kind)}
               onChange={(e) => setValue(e.target.value)}
               placeholder={
                 ["page", "linkedin"].includes(kind)

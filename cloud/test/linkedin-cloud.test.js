@@ -49,6 +49,9 @@ function database() {
           async first() {
             return db.prepare(sql).get(...args) || null;
           },
+          async all() {
+            return { results: db.prepare(sql).all(...args) };
+          },
           async run() {
             return { meta: db.prepare(sql).run(...args) };
           },

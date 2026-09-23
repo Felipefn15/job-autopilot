@@ -458,14 +458,12 @@ test("catalog normalizes accents and Brazil aliases; legacy facets and profile r
         .total,
       0,
     );
-    env.db
-      .prepare("UPDATE settings SET data=? WHERE id=1")
-      .run(
-        JSON.stringify({
-          targetRoles: "Enfermeiro, Analista de sistemas",
-          minScore: 60,
-        }),
-      );
+    env.db.prepare("UPDATE settings SET data=? WHERE id=1").run(
+      JSON.stringify({
+        targetRoles: "Enfermeiro, Analista de sistemas",
+        minScore: 60,
+      }),
+    );
     assert.equal(
       (await catalog(env, new URLSearchParams("profile=1"))).total,
       2,
@@ -479,6 +477,52 @@ test("catalog normalizes accents and Brazil aliases; legacy facets and profile r
     );
     assert.equal((await catalog(env, new URLSearchParams())).total, 2);
     assert.equal((await catalog(env, new URLSearchParams("q=%25"))).total, 0);
+  } finally {
+    env.db.close();
+  }
+});
+
+test("Gupy active search rotates roles, keeps independent pagination and counts only inserted rows with triggers", async (t) => {
+  const env = fixture();
+  const requested = [];
+  t.mock.method(globalThis, "fetch", async (url) => {
+    const u = new URL(url);
+    requested.push(u);
+    return Response.json({
+      pagination: { total: 57 },
+      data: Array.from({ length: 25 }, (_, i) => ({
+        name: "Product Owner",
+        careerPageName: "Empresa",
+        jobUrl: `https://empresa.gupy.io/jobs/${i}`,
+        description:
+          "Responsável pela priorização de backlog, planejamento das entregas e comunicação com clientes e equipes de desenvolvimento.",
+        country: "Brasil",
+        workplaceType: "remote",
+        publishedDate: "2026-09-23T00:00:00Z",
+      })),
+    });
+  });
+  try {
+    const config = {
+      targetRoles: "Product Owner, Scrum Master",
+      remoteOnly: true,
+    };
+    const source = () =>
+      env.db.prepare("SELECT * FROM sources WHERE id='board-gupy'").get();
+    assert.equal(await discover(env, source(), config), 25);
+    const stats = JSON.parse(source().last_stats);
+    assert.equal(stats.saved, 25);
+    assert.equal(stats.duplicates, 0);
+    assert.equal(await discover(env, source(), config), 0);
+    assert.equal(JSON.parse(source().last_stats).duplicates, 25);
+    assert.equal(requested[0].searchParams.get("jobName"), "product owner");
+    assert.equal(requested[1].searchParams.get("jobName"), "scrum master");
+    assert.equal(requested[1].searchParams.get("offset"), "0");
+    assert.equal(env.db.prepare("SELECT count(*) n FROM jobs").get().n, 25);
+    assert.equal(
+      (await catalog(env, new URLSearchParams("source=gupy"))).total,
+      25,
+    );
   } finally {
     env.db.close();
   }

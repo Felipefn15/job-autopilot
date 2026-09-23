@@ -43,6 +43,7 @@ export async function catalog(env, params) {
   const source = params.get("source");
   if (
     [
+      "gupy",
       "greenhouse",
       "lever",
       "ashby",

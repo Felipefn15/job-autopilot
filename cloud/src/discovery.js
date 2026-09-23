@@ -1,6 +1,7 @@
 import { publicUrl, cleanText, digest, LIMITS } from "./core.js";
 import { event } from "./db.js";
 import { triageJob, triageKey } from "./triage.js";
+import { gupyPage } from "./gupy.js";
 import { workplaceLocation } from "./roles.js";
 import { githubJobs, telegramJobs, sourceWindow } from "./community.js";
 import { linkedinUrl, parseLinkedinPost, linkedinJob } from "./linkedin.js";
@@ -9,6 +10,7 @@ import { classifyTitle, searchPlan } from "./job-insights.js";
 export function sourceSpec(kind, value) {
   if (
     ![
+      "gupy",
       "greenhouse",
       "lever",
       "ashby",
@@ -23,7 +25,8 @@ export function sourceSpec(kind, value) {
   )
     throw new Error("Fonte não suportada.");
   if (kind === "page") return { kind, value: publicUrl(value) };
-  if (["remotive", "remoteok"].includes(kind)) return { kind, value: kind };
+  if (["gupy", "remotive", "remoteok"].includes(kind))
+    return { kind, value: kind };
   if (kind === "linkedin") return { kind, value: linkedinUrl(value) };
   if (kind === "github") {
     if (!/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+$/.test(value))
@@ -155,7 +158,36 @@ export async function discover(env, source, config) {
   const slug = encodeURIComponent(source.value);
   const plan = searchPlan(source, config);
   let directed = false;
-  if (["remotive", "remoteok"].includes(source.kind)) {
+  if (source.kind === "gupy") {
+    if (!plan.terms.length)
+      throw new Error("Gupy: defina cargos de interesse para a busca ativa.");
+    directed = true;
+    plan.term = plan.terms[(plan.state.index || 0) % plan.terms.length];
+    const offsets = plan.state.offsets || {};
+    const offset = Math.max(0, Math.min(1000, Number(offsets[plan.term]) || 0));
+    const query = new URLSearchParams({
+      jobName: plan.term,
+      limit: "25",
+      offset: String(offset),
+    });
+    const result = gupyPage(
+      JSON.parse(
+        await fetchText(
+          `https://employability-portal.gupy.io/api/v1/jobs?${query}`,
+          4000000,
+        ),
+      ),
+    );
+    jobs = result.jobs;
+    offsets[plan.term] =
+      result.count === 25 &&
+      offset + result.count < result.total &&
+      offset < 1000
+        ? offset + result.count
+        : 0;
+    plan.state.offsets = offsets;
+    plan.state.index = (plan.state.index || 0) + 1;
+  } else if (["remotive", "remoteok"].includes(source.kind)) {
     const endpoint =
       source.kind === "remotive"
         ? "https://remotive.com/api/remote-jobs"
@@ -344,7 +376,7 @@ export async function discover(env, source, config) {
     nextCursor = directed ? Number(source.cursor) || 0 : window.cursor;
   }
   const saved = await saveJobs(env, source, config, jobs, stats);
-  if (["remotive", "smartrecruiters"].includes(source.kind)) {
+  if (["gupy", "remotive", "smartrecruiters"].includes(source.kind)) {
     plan.state.turn = (plan.state.turn || 0) + 1;
     await env.DB.prepare("UPDATE sources SET search_state=? WHERE id=?")
       .bind(JSON.stringify(plan.state), source.id)
@@ -365,11 +397,11 @@ export async function saveJobs(env, source, config, jobs, stats = {}) {
   async function flush() {
     if (!pending.length) return;
     const r = await env.DB.prepare(
-      "INSERT OR IGNORE INTO jobs(id,source_id,title,company,location,url,description,status,proof,triage_key) SELECT json_extract(value,'$.id'),json_extract(value,'$.source_id'),json_extract(value,'$.title'),json_extract(value,'$.company'),json_extract(value,'$.location'),json_extract(value,'$.url'),json_extract(value,'$.description'),json_extract(value,'$.status'),json_extract(value,'$.proof'),json_extract(value,'$.triage_key') FROM json_each(?)",
+      "INSERT OR IGNORE INTO jobs(id,source_id,title,company,location,url,description,status,proof,triage_key) SELECT json_extract(value,'$.id'),json_extract(value,'$.source_id'),json_extract(value,'$.title'),json_extract(value,'$.company'),json_extract(value,'$.location'),json_extract(value,'$.url'),json_extract(value,'$.description'),json_extract(value,'$.status'),json_extract(value,'$.proof'),json_extract(value,'$.triage_key') FROM json_each(?) RETURNING id",
     )
       .bind(JSON.stringify(pending))
-      .run();
-    saved += r.meta.changes;
+      .all();
+    saved += r.results.length;
     await env.DB.prepare(
       "UPDATE jobs SET area=COALESCE(jobs.area,json_extract(j.value,'$.area')),seniority=COALESCE(jobs.seniority,json_extract(j.value,'$.seniority')),published_at=COALESCE(jobs.published_at,json_extract(j.value,'$.published_at')),valid_through=COALESCE(json_extract(j.value,'$.valid_through'),jobs.valid_through),last_seen_at=CURRENT_TIMESTAMP,availability=CASE WHEN datetime(COALESCE(json_extract(j.value,'$.valid_through'),jobs.valid_through))<CURRENT_TIMESTAMP THEN 'closed' ELSE 'open' END FROM json_each(?) AS j WHERE jobs.id=json_extract(j.value,'$.id')",
     )

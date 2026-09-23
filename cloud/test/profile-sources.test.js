@@ -135,6 +135,9 @@ test("Lever requests bounded pages and configured location, and reports exclusio
             if (sql.startsWith("UPDATE sources")) stats = JSON.parse(args[1]);
             return this;
           },
+          async all() {
+            return { results: [{ id: "new-job" }] };
+          },
           async run() {
             return { meta: { changes: 1 } };
           },

@@ -72,6 +72,20 @@ export function selectSources(rows, focus = "brasil", config = {}) {
         (a.priority ?? 50) - (b.priority ?? 50) ||
         a.id.localeCompare(b.id),
     );
+  // Reserve one slot for cross-company active search; retain source rotation in the others.
+  const active = sorted.find(
+    (s) => s.kind === "gupy" && config.targetRoles?.trim(),
+  );
+  if (active) {
+    return [
+      active,
+      ...selectSources(
+        sorted.filter((s) => s !== active),
+        focus,
+        config,
+      ),
+    ].slice(0, 5);
+  }
   if (focus === "global") return sorted.slice(0, 5);
   const selected = [
     ...sorted.filter((s) => s.region === "BR").slice(0, 4),
