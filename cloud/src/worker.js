@@ -7,6 +7,7 @@ import { tick } from "./pipeline.js";
 import { emailConfigured } from "./email.js";
 import { cloudLinkedin } from "./linkedin-cloud.js";
 import { retriage } from "./triage.js";
+import { catalog } from "./catalog.js";
 export { LinkedInCloud } from "./linkedin-cloud.js";
 const headers = {
   "Content-Type": "application/json; charset=utf-8",
@@ -78,6 +79,9 @@ export default {
         }
         return json({ error: "Rota não encontrada." }, 404);
       }
+      if (url.pathname === "/api/jobs" && req.method === "GET") {
+        return json(await catalog(env, url.searchParams));
+      }
       if (url.pathname === "/api/state" && req.method === "GET") {
         const [config, p, sources, jobs, events, usage, collector] =
           await Promise.all([
@@ -87,7 +91,7 @@ export default {
               "SELECT * FROM sources ORDER BY value LIMIT 2000",
             ).all(),
             env.DB.prepare(
-              "SELECT id,title,company,location,url,status,score,analysis,draft,proof,created_at FROM jobs ORDER BY created_at DESC LIMIT 200",
+              "SELECT id,title,company,location,url,status,score,analysis,draft,proof,created_at FROM jobs WHERE status NOT IN ('filtered','rejected') ORDER BY created_at DESC LIMIT 200",
             ).all(),
             env.DB.prepare(
               "SELECT * FROM events ORDER BY id DESC LIMIT 30",
@@ -99,7 +103,13 @@ export default {
               "SELECT detail,created_at FROM events WHERE kind='linkedin_collector' ORDER BY id DESC LIMIT 1",
             ).first(),
           ]);
+        const totals = await env.DB.prepare(
+          "SELECT status,COUNT(*) AS n FROM jobs GROUP BY status",
+        ).all();
         return json({
+          counts: Object.fromEntries(
+            totals.results.map((row) => [row.status, row.n]),
+          ),
           config,
           profile: p
             ? {

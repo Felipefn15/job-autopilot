@@ -196,6 +196,48 @@ header {
   display: block;
   margin-bottom: 10px;
 }
+.catalog-tabs,
+.catalog-search,
+.catalog-pagination {
+  display: flex;
+  gap: 12px;
+  margin: 18px 0;
+}
+.catalog-search input {
+  flex: 1;
+  min-width: 0;
+}
+.catalog-pagination {
+  justify-content: space-between;
+}
+.catalog-job {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px;
+  border-bottom: 1px solid #e2e8ee;
+}
+.catalog-job > div:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.catalog-job p,
+.catalog-job small {
+  color: #607185;
+}
+.catalog-job p {
+  margin: 8px 0;
+}
+.catalog-job .score {
+  display: block;
+  margin-top: 12px;
+}
+@media (max-width: 700px) {
+  .catalog-job,
+  .catalog-tabs {
+    flex-direction: column;
+  }
+}
 .stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

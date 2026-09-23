@@ -1,6 +1,6 @@
 import { publicUrl, cleanText, digest, LIMITS } from "./core.js";
 import { event } from "./db.js";
-import { triageJob } from "./triage.js";
+import { triageJob, triageKey } from "./triage.js";
 import { workplaceLocation } from "./roles.js";
 import { githubJobs, telegramJobs, sourceWindow } from "./community.js";
 import { linkedinUrl, parseLinkedinPost, linkedinJob } from "./linkedin.js";
@@ -10,6 +10,7 @@ export function sourceSpec(kind, value) {
       "greenhouse",
       "lever",
       "ashby",
+      "smartrecruiters",
       "page",
       "linkedin",
       "github",
@@ -145,7 +146,43 @@ export async function discover(env, source, config) {
   let jobs = [];
   let nextCursor = 0;
   const slug = encodeURIComponent(source.value);
-  if (source.kind === "github") {
+  if (source.kind === "smartrecruiters") {
+    const offset = Math.max(0, Number(source.cursor) || 0);
+    const query = new URLSearchParams({ limit: "5", offset: String(offset) });
+    if (source.location_filter) query.set("country", source.location_filter);
+    const base = `https://api.smartrecruiters.com/v1/companies/${slug}/postings`;
+    const list = JSON.parse(await fetchText(`${base}?${query}`, 2000000));
+    if (!Array.isArray(list.content))
+      throw new Error("Catálogo SmartRecruiters inválido.");
+    // Bound requests per run. Advance only after every detail was fetched successfully.
+    for (const item of list.content.slice(0, 5)) {
+      const d = JSON.parse(
+        await fetchText(`${base}/${encodeURIComponent(item.id)}`, 2000000),
+      );
+      jobs.push({
+        title: d.name,
+        company: d.company?.name || source.value,
+        location: [
+          d.location?.city,
+          d.location?.region,
+          d.location?.country,
+          d.location?.remote ? "Remote" : "",
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        url:
+          d.applyUrl ||
+          `https://jobs.smartrecruiters.com/${slug}/${encodeURIComponent(d.id)}`,
+        description: Object.values(d.jobAd?.sections || {})
+          .map((s) => s.text || "")
+          .join("\n"),
+      });
+    }
+    nextCursor =
+      offset + list.content.length < Number(list.totalFound)
+        ? offset + list.content.length
+        : 0;
+  } else if (source.kind === "github") {
     const repo = sourceSpec("github", source.value).value;
     const page = Math.max(1, Math.min(10, Number(source.cursor) || 1));
     const fetchPage = async (p) =>
@@ -257,6 +294,7 @@ export async function discover(env, source, config) {
 }
 
 export async function saveJobs(env, source, config, jobs, stats = {}) {
+  const key = await triageKey(config);
   let saved = 0;
   let pending = [],
     bytes = 2;
@@ -264,7 +302,7 @@ export async function saveJobs(env, source, config, jobs, stats = {}) {
   async function flush() {
     if (!pending.length) return;
     const r = await env.DB.prepare(
-      "INSERT OR IGNORE INTO jobs(id,source_id,title,company,location,url,description) SELECT json_extract(value,'$.id'),json_extract(value,'$.source_id'),json_extract(value,'$.title'),json_extract(value,'$.company'),json_extract(value,'$.location'),json_extract(value,'$.url'),json_extract(value,'$.description') FROM json_each(?)",
+      "INSERT OR IGNORE INTO jobs(id,source_id,title,company,location,url,description,status,proof,triage_key) SELECT json_extract(value,'$.id'),json_extract(value,'$.source_id'),json_extract(value,'$.title'),json_extract(value,'$.company'),json_extract(value,'$.location'),json_extract(value,'$.url'),json_extract(value,'$.description'),json_extract(value,'$.status'),json_extract(value,'$.proof'),json_extract(value,'$.triage_key') FROM json_each(?)",
     )
       .bind(JSON.stringify(pending))
       .run();
@@ -292,7 +330,6 @@ export async function saveJobs(env, source, config, jobs, stats = {}) {
     if (!verdict.pass) {
       stats.filtered++;
       stats.reasons[verdict.reason] = (stats.reasons[verdict.reason] || 0) + 1;
-      continue;
     }
     try {
       j.url = publicUrl(j.url);
@@ -300,7 +337,7 @@ export async function saveJobs(env, source, config, jobs, stats = {}) {
       stats.invalid++;
       continue;
     }
-    stats.matched++;
+    if (verdict.pass) stats.matched++;
     const id = await digest(j.url);
     const row = {
       id,
@@ -310,6 +347,9 @@ export async function saveJobs(env, source, config, jobs, stats = {}) {
       location: cleanText(j.location || "Não informado").slice(0, 300),
       url: j.url,
       description: j.description,
+      status: verdict.pass ? "discovered" : "filtered",
+      proof: verdict.reason,
+      triage_key: key,
     };
     const size = encoder.encode(JSON.stringify(row)).length + 1;
     if (bytes + size > 1000000) await flush();
@@ -318,7 +358,7 @@ export async function saveJobs(env, source, config, jobs, stats = {}) {
   }
   await flush();
   stats.saved = saved;
-  stats.duplicates = stats.matched - saved;
+  stats.duplicates = stats.scanned - stats.invalid - saved;
   await event(
     env,
     "discovery",

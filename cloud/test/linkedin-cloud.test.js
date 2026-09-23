@@ -23,6 +23,7 @@ function database() {
   db.exec(
     "INSERT INTO profiles(id,filename,pdf,data,confirmed) VALUES('p','cv.pdf','x','{}',1)",
   );
+  db.exec("ALTER TABLE jobs ADD COLUMN triage_key TEXT");
   return {
     db,
     DB: {

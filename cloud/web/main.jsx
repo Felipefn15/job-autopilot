@@ -14,6 +14,120 @@ const labels = {
   submitted: "Enviada",
   unknown: "Verificar envio",
 };
+function JobCatalog({ view, api, revision }) {
+  const [q, setQ] = useState(""),
+    [search, setSearch] = useState(""),
+    [page, setPage] = useState(1);
+  const [result, setResult] = useState(null),
+    [error, setError] = useState("");
+  useEffect(() => {
+    let alive = true;
+    setResult(null);
+    setError("");
+    api(`jobs?${new URLSearchParams({ view, page: String(page), q: search })}`)
+      .then((r) => {
+        if (alive) setResult(r);
+      })
+      .catch((e) => {
+        if (alive) setError(e.message);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [view, page, search, revision]);
+  return (
+    <section className="catalog-view">
+      <p>
+        {view === "recommended"
+          ? "Avaliadas pela IA, da maior compatibilidade para a menor."
+          : "Acervo de todas as áreas. Vagas fora das suas preferências também ficam aqui."}
+      </p>
+      <form
+        className="catalog-search"
+        onSubmit={(e) => {
+          e.preventDefault();
+          setSearch(q);
+          setPage(1);
+        }}
+      >
+        <input
+          aria-label="Buscar no acervo"
+          placeholder="Cargo, empresa ou localização"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+        <button>Buscar</button>
+      </form>
+      {error && (
+        <p role="alert" className="error">
+          {error}
+        </p>
+      )}
+      {!result && !error && <p role="status">Carregando vagas…</p>}
+      {result && (
+        <>
+          <p className="footnote">
+            {result.total} vagas · Página {page} de{" "}
+            {Math.max(1, Math.ceil(result.total / 50))}
+          </p>
+          <div className="job-list">
+            {result.jobs.map((j) => (
+              <article className="catalog-job" key={j.id}>
+                <div>
+                  <a href={j.url} target="_blank" rel="noreferrer">
+                    <strong>{j.title}</strong> ↗
+                  </a>
+                  <p>
+                    {j.company} · {j.location}
+                  </p>
+                  <small>{j.proof || "Ainda não avaliada pela IA"}</small>
+                </div>
+                <div>
+                  <span className={"status " + j.status}>
+                    {labels[j.status]}
+                  </span>
+                  <strong className="score">
+                    {j.score == null ? "—" : `${j.score}/100`}
+                  </strong>
+                </div>
+              </article>
+            ))}
+            {!result.jobs.length && (
+              <div className="empty">
+                <h2>
+                  {view === "recommended"
+                    ? "Nenhuma recomendação por enquanto"
+                    : "Nenhuma vaga encontrada"}
+                </h2>
+                <p>
+                  {view === "recommended"
+                    ? "As recomendações aparecem após a avaliação da IA. Explore o acervo enquanto novas análises são feitas."
+                    : "Execute novos lotes para ampliar o acervo ou tente outro termo."}
+                </p>
+              </div>
+            )}
+          </div>
+          <div className="catalog-pagination">
+            <button
+              className="secondary"
+              disabled={page === 1}
+              onClick={() => setPage(page - 1)}
+            >
+              Anterior
+            </button>
+            <button
+              className="secondary"
+              disabled={page * 50 >= result.total}
+              onClick={() => setPage(page + 1)}
+            >
+              Próxima
+            </button>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
 function App() {
   const [token, setToken] = useState(""),
     [input, setInput] = useState(""),
@@ -111,11 +225,16 @@ function App() {
   const jobs = data.jobs,
     counts = Object.fromEntries(
       ["discovered", "matched", "submitted", "needs_input", "unknown"].map(
-        (s) => [s, jobs.filter((j) => j.status === s).length],
+        (s) => [
+          s,
+          data.counts?.[s] ?? jobs.filter((j) => j.status === s).length,
+        ],
       ),
     );
   const nav = [
     ["overview", "Visão geral"],
+    ["catalog", "Todas as vagas"],
+    ["recommended", "Recomendadas pela IA"],
     ["profile", "Currículo e preferências"],
     ["sources", "Fontes"],
     ["history", "Atividade"],
@@ -304,6 +423,14 @@ function App() {
                 </span>
               </li>
             </ol>
+            <div className="catalog-tabs">
+              <button className="secondary" onClick={() => setTab("catalog")}>
+                Explorar todas as vagas
+              </button>
+              <button onClick={() => setTab("recommended")}>
+                Recomendadas pela IA
+              </button>
+            </div>
             <section className="job-list">
               {visibleJobs.map((j) => (
                 <button
@@ -366,8 +493,8 @@ function App() {
               )}
             </section>
             <p className="footnote">
-              {visibleJobs.length} exibidas · Histórico limitado às 200 mais
-              recentes. Nota = compatibilidade com o perfil.
+              {visibleJobs.length} em andamento exibidas · Acervo completo em
+              Todas as vagas. Nota = compatibilidade com o perfil.
             </p>
             <section className="quota">
               <h2>Uso de hoje</h2>
@@ -388,6 +515,9 @@ function App() {
               </div>
             </section>
           </>
+        )}
+        {["catalog", "recommended"].includes(tab) && (
+          <JobCatalog key={tab} view={tab} api={api} revision={data} />
         )}
         {tab === "profile" && (
           <Profile data={data} api={api} act={act} busy={busy} />
@@ -1074,6 +1204,7 @@ function Sources({ data, api, act, busy }) {
       greenhouse: "https://job-boards.greenhouse.io/",
       lever: "https://jobs.lever.co/",
       ashby: "https://jobs.ashbyhq.com/",
+      smartrecruiters: "https://careers.smartrecruiters.com/",
       github: "https://github.com/",
       telegram: "https://t.me/s/",
     })[s.kind] || "") + s.value;
@@ -1095,6 +1226,13 @@ function Sources({ data, api, act, busy }) {
       v = u.pathname.split("/")[1];
     } else if (u.hostname === "jobs.ashbyhq.com") {
       k = "ashby";
+      v = u.pathname.split("/")[1];
+    } else if (
+      ["jobs.smartrecruiters.com", "careers.smartrecruiters.com"].includes(
+        u.hostname,
+      )
+    ) {
+      k = "smartrecruiters";
       v = u.pathname.split("/")[1];
     } else if (/^(www\.)?linkedin\.com$/.test(u.hostname)) {
       k = "linkedin";
@@ -1166,6 +1304,7 @@ function Sources({ data, api, act, busy }) {
               <option value="greenhouse">Greenhouse</option>
               <option value="lever">Lever</option>
               <option value="ashby">Ashby</option>
+              <option value="smartrecruiters">SmartRecruiters</option>
               <option value="page">Página de vaga</option>
               <option value="linkedin">Post público do LinkedIn</option>
               <option value="github">Comunidade GitHub</option>
