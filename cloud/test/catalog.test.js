@@ -65,13 +65,13 @@ test("bulk discovery persists jobs, deduplicates URLs and uses bounded database 
     db.close();
   }
 });
-test("catalog migrations install 89 references, prioritize 28 Brazilian sources and preserve paused sources", () => {
+test("catalog migrations install 91 references, prioritize 28 Brazilian sources and preserve paused sources", () => {
   const db = new DatabaseSync(":memory:");
   try {
     const dir = new URL("../migrations/", import.meta.url);
     for (const f of readdirSync(dir).sort())
       db.exec(readFileSync(new URL(f, dir), "utf8"));
-    assert.equal(db.prepare("SELECT count(*) AS n FROM sources").get().n, 89);
+    assert.equal(db.prepare("SELECT count(*) AS n FROM sources").get().n, 91);
     assert.equal(
       db.prepare("SELECT count(*) AS n FROM sources WHERE region='BR'").get().n,
       28,

@@ -4,6 +4,7 @@ import { triageJob, triageKey } from "./triage.js";
 import { workplaceLocation } from "./roles.js";
 import { githubJobs, telegramJobs, sourceWindow } from "./community.js";
 import { linkedinUrl, parseLinkedinPost, linkedinJob } from "./linkedin.js";
+import { boardJobs } from "./boards.js";
 export function sourceSpec(kind, value) {
   if (
     ![
@@ -11,6 +12,8 @@ export function sourceSpec(kind, value) {
       "lever",
       "ashby",
       "smartrecruiters",
+      "remotive",
+      "remoteok",
       "page",
       "linkedin",
       "github",
@@ -19,6 +22,7 @@ export function sourceSpec(kind, value) {
   )
     throw new Error("Fonte não suportada.");
   if (kind === "page") return { kind, value: publicUrl(value) };
+  if (["remotive", "remoteok"].includes(kind)) return { kind, value: kind };
   if (kind === "linkedin") return { kind, value: linkedinUrl(value) };
   if (kind === "github") {
     if (!/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+$/.test(value))
@@ -146,7 +150,13 @@ export async function discover(env, source, config) {
   let jobs = [];
   let nextCursor = 0;
   const slug = encodeURIComponent(source.value);
-  if (source.kind === "smartrecruiters") {
+  if (["remotive", "remoteok"].includes(source.kind)) {
+    const endpoint =
+      source.kind === "remotive"
+        ? "https://remotive.com/api/remote-jobs"
+        : "https://remoteok.com/api";
+    jobs = boardJobs(source.kind, JSON.parse(await fetchText(endpoint)));
+  } else if (source.kind === "smartrecruiters") {
     const offset = Math.max(0, Number(source.cursor) || 0);
     const query = new URLSearchParams({ limit: "5", offset: String(offset) });
     if (source.location_filter) query.set("country", source.location_filter);
@@ -281,7 +291,7 @@ export async function discover(env, source, config) {
       );
   }
   const stats = { received: jobs.length };
-  if (["greenhouse", "ashby"].includes(source.kind)) {
+  if (["greenhouse", "ashby", "remotive", "remoteok"].includes(source.kind)) {
     const window = sourceWindow(jobs, source.cursor);
     jobs = window.jobs;
     nextCursor = window.cursor;

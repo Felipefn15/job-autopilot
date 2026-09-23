@@ -187,7 +187,7 @@ export async function tick(env, manual = false, applyId = null) {
         }
       }
       await env.DB.prepare(
-        "UPDATE sources SET checked_at=CURRENT_TIMESTAMP,error=?,retry_after=CASE WHEN ? IS NULL THEN NULL ELSE datetime('now','+6 hours') END WHERE id=?",
+        "UPDATE sources SET checked_at=CURRENT_TIMESTAMP,error=?,retry_after=CASE WHEN ? IS NOT NULL THEN datetime('now','+6 hours') WHEN kind IN ('remotive','remoteok') THEN datetime('now','+24 hours') ELSE NULL END WHERE id=?",
       )
         .bind(error, error, source.id)
         .run();

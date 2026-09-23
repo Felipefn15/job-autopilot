@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { readFileSync, readdirSync } from "node:fs";
 import { catalog } from "../src/catalog.js";
 import { saveJobs, discover } from "../src/discovery.js";
+import { boardJobs } from "../src/boards.js";
 function fixture() {
   const db = new DatabaseSync(":memory:");
   const dir = new URL("../migrations/", import.meta.url);
@@ -33,6 +34,70 @@ function fixture() {
     },
   };
 }
+test("public boards skip metadata, retain attribution URLs and do not invent worldwide eligibility", () => {
+  const jobs = boardJobs("remoteok", [
+    { legal: "terms" },
+    {
+      position: "Operations manager",
+      company: "Test",
+      url: "https://remoteok.com/remote-jobs/123",
+      description: "Details",
+    },
+    { position: "Bad", url: "https://other.example/job" },
+  ]);
+  assert.equal(jobs.length, 1);
+  assert.match(jobs[0].location, /não informada/);
+  assert.equal(jobs[0].url, "https://remoteok.com/remote-jobs/123");
+  assert.equal(
+    boardJobs("remotive", {
+      jobs: [
+        {
+          title: "Nurse",
+          candidate_required_location: "United States",
+          url: "https://remotive.com/remote-jobs/health/123",
+        },
+      ],
+    })[0].location,
+    "United States · Remote",
+  );
+});
+test("catalog filters source and collection date and searches descriptions", async () => {
+  const env = fixture();
+  try {
+    await saveJobs(
+      env,
+      { id: "board-remotive", kind: "remotive", value: "remotive" },
+      {},
+      [
+        {
+          title: "Analista",
+          company: "Example",
+          url: "https://remotive.com/remote-jobs/123",
+          description:
+            "Responsável por coordenação operacional e planejamento. Experiência com atendimento e acompanhamento de pacientes.",
+        },
+      ],
+    );
+    assert.equal(
+      (
+        await catalog(
+          env,
+          new URLSearchParams("q=pacientes&source=remotive&days=1"),
+        )
+      ).total,
+      1,
+    );
+    assert.equal(
+      (await catalog(env, new URLSearchParams("source=remoteok"))).total,
+      0,
+    );
+    env.db.exec("UPDATE jobs SET created_at=datetime('now','-40 days')");
+    assert.equal((await catalog(env, new URLSearchParams("days=30"))).total, 0);
+    assert.equal((await catalog(env, new URLSearchParams())).total, 1);
+  } finally {
+    env.db.close();
+  }
+});
 test("catalog preserves out-of-preference jobs, paginates, deduplicates and sorts AI recommendations", async () => {
   const env = fixture();
   try {

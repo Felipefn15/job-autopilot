@@ -14,6 +14,26 @@ const labels = {
   submitted: "Enviada",
   unknown: "Verificar envio",
 };
+function JobOrigin({ url, kind }) {
+  let host = "";
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {}
+  const name =
+    host === "remotive.com"
+      ? "Remotive"
+      : host === "remoteok.com"
+        ? "Remote OK"
+        : kind;
+  return name ? (
+    <small className="job-origin">
+      Fonte:{" "}
+      <a href={url} target="_blank" rel="noreferrer">
+        {name}
+      </a>
+    </small>
+  ) : null;
+}
 function JobDescription({ id, api }) {
   const [text, setText] = useState(null),
     [error, setError] = useState("");
@@ -50,6 +70,8 @@ function JobDescription({ id, api }) {
   );
 }
 function JobCatalog({ view, api, revision }) {
+  const [source, setSource] = useState(""),
+    [days, setDays] = useState("");
   const [expanded, setExpanded] = useState(null);
   const [q, setQ] = useState(""),
     [search, setSearch] = useState(""),
@@ -60,7 +82,9 @@ function JobCatalog({ view, api, revision }) {
     let alive = true;
     setResult(null);
     setError("");
-    api(`jobs?${new URLSearchParams({ view, page: String(page), q: search })}`)
+    api(
+      `jobs?${new URLSearchParams({ view, page: String(page), q: search, source, days })}`,
+    )
       .then((r) => {
         if (alive) setResult(r);
       })
@@ -70,7 +94,7 @@ function JobCatalog({ view, api, revision }) {
     return () => {
       alive = false;
     };
-  }, [view, page, search, revision]);
+  }, [view, page, search, source, days, revision]);
   return (
     <section className="catalog-view">
       <p>
@@ -88,12 +112,57 @@ function JobCatalog({ view, api, revision }) {
       >
         <input
           aria-label="Buscar no acervo"
-          placeholder="Cargo, empresa ou localização"
+          placeholder="Cargo, competência, empresa ou localização"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
         <button>Buscar</button>
       </form>
+      <div className="catalog-filters">
+        <label>
+          Fonte
+          <select
+            value={source}
+            onChange={(e) => {
+              setSource(e.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">Todas as fontes</option>
+            {[
+              "greenhouse",
+              "lever",
+              "ashby",
+              "smartrecruiters",
+              "remotive",
+              "remoteok",
+              "github",
+              "telegram",
+              "linkedin",
+              "page",
+            ].map((s) => (
+              <option key={s} value={s}>
+                {s === "remoteok" ? "Remote OK" : s}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Adicionadas ao acervo
+          <select
+            value={days}
+            onChange={(e) => {
+              setDays(e.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">Qualquer data</option>
+            <option value="1">Últimas 24 horas</option>
+            <option value="7">Últimos 7 dias</option>
+            <option value="30">Últimos 30 dias</option>
+          </select>
+        </label>
+      </div>
       {error && (
         <p role="alert" className="error">
           {error}
@@ -117,6 +186,11 @@ function JobCatalog({ view, api, revision }) {
                     {j.company} · {j.location}
                   </p>
                   <small>{j.proof || "Ainda não avaliada pela IA"}</small>
+                  <JobOrigin url={j.url} kind={j.source_kind} />
+                  <small>
+                    Adicionada em{" "}
+                    {new Date(j.created_at + "Z").toLocaleDateString("pt-BR")}
+                  </small>
                   {j.excerpt && (
                     <p>
                       {j.excerpt}
@@ -630,6 +704,7 @@ function App() {
             <a href={current.url} target="_blank" rel="noreferrer">
               Abrir vaga original ↗
             </a>
+            <JobOrigin url={current.url} />
             {current.analysis && (
               <Analysis value={JSON.parse(current.analysis)} />
             )}{" "}
@@ -1257,14 +1332,18 @@ function Sources({ data, api, act, busy }) {
   const [sourceFilter, setSourceFilter] = useState("");
   const [region, setRegion] = useState("BR");
   const sourceLink = (s) =>
-    (({
-      greenhouse: "https://job-boards.greenhouse.io/",
-      lever: "https://jobs.lever.co/",
-      ashby: "https://jobs.ashbyhq.com/",
-      smartrecruiters: "https://careers.smartrecruiters.com/",
-      github: "https://github.com/",
-      telegram: "https://t.me/s/",
-    })[s.kind] || "") + s.value;
+    s.kind === "remotive"
+      ? "https://remotive.com"
+      : s.kind === "remoteok"
+        ? "https://remoteok.com"
+        : ({
+            greenhouse: "https://job-boards.greenhouse.io/",
+            lever: "https://jobs.lever.co/",
+            ashby: "https://jobs.ashbyhq.com/",
+            smartrecruiters: "https://careers.smartrecruiters.com/",
+            github: "https://github.com/",
+            telegram: "https://t.me/s/",
+          }[s.kind] || "") + s.value;
   const [kind, setKind] = useState("greenhouse"),
     [value, setValue] = useState(""),
     [bulk, setBulk] = useState("");
@@ -1362,6 +1441,8 @@ function Sources({ data, api, act, busy }) {
               <option value="lever">Lever</option>
               <option value="ashby">Ashby</option>
               <option value="smartrecruiters">SmartRecruiters</option>
+              <option value="remotive">Remotive</option>
+              <option value="remoteok">Remote OK</option>
               <option value="page">Página de vaga</option>
               <option value="linkedin">Post público do LinkedIn</option>
               <option value="github">Comunidade GitHub</option>
