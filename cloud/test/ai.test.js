@@ -71,6 +71,37 @@ test("local budget cannot be bypassed with a fallback", async (t) => {
   await assert.rejects(ai(e, "JSON"), /Cota diária/);
   assert.equal(calls.length, 1);
 });
+test("Gemini timeout falls back once to Groq within the daily budget", async (t) => {
+  const e = environment();
+  const calls = mockFetch(t, [
+    () => {
+      throw new DOMException("timeout", "TimeoutError");
+    },
+    groqOK,
+  ]);
+  assert.deepEqual(await ai(e, "JSON"), { ok: true });
+  assert.equal(calls.length, 2);
+  assert.equal(e.used, 2);
+});
+test("provider outage falls back but a second timeout ends with an actionable error", async (t) => {
+  const calls = mockFetch(t, [
+    () => new Response("down", { status: 503 }),
+    () => {
+      throw new DOMException("timeout", "TimeoutError");
+    },
+  ]);
+  await assert.rejects(ai(environment(), "JSON"), /Groq excedeu 25 segundos/);
+  assert.equal(calls.length, 2);
+});
+test("timeout fallback cannot bypass an exhausted daily budget", async (t) => {
+  const calls = mockFetch(t, [
+    () => {
+      throw new DOMException("timeout", "TimeoutError");
+    },
+  ]);
+  await assert.rejects(ai(environment(1), "JSON"), /Cota diária/);
+  assert.equal(calls.length, 1);
+});
 test("authentication errors do not trigger fallback", async (t) => {
   const calls = mockFetch(t, [
     () => new Response("secret must not leak", { status: 401 }),

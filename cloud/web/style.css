@@ -238,6 +238,18 @@ header {
     flex-direction: column;
   }
 }
+.job-description {
+  margin: 24px 0;
+}
+.description-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+  color: #34495e;
+}
+.catalog-job .secondary {
+  margin-top: 12px;
+}
 .stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

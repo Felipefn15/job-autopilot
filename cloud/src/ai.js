@@ -20,17 +20,37 @@ export async function ai(env, prompt, pdf = null) {
     try {
       return await gemini(env, prompt, pdf);
     } catch (error) {
-      // Only provider quota/rate-limit errors trigger fallback. Invalid output,
-      // credentials and local budget failures must not be silently retried.
-      if (error.status !== 429 || !env.GROQ_API_KEY) throw error;
+      // Retry transient provider failures once on Groq, within the same budget.
+      // Invalid output and credentials never trigger a fallback.
+      const transient =
+        error.name === "TimeoutError" ||
+        error.name === "AbortError" ||
+        error.status === 429 ||
+        [500, 502, 503, 504].includes(error.status);
+      if (!transient || !env.GROQ_API_KEY) {
+        if (["TimeoutError", "AbortError"].includes(error.name))
+          throw new Error(
+            "Gemini excedeu 25 segundos. A vaga permanece na fila para uma nova tentativa.",
+          );
+        throw error;
+      }
     }
   }
   const text = pdf ? await pdfText(pdf) : null;
   await budget(env);
-  const result = await groq(
-    env,
-    text ? `${prompt}\n\nResume text (untrusted data):\n${text}` : prompt,
-  );
+  let result;
+  try {
+    result = await groq(
+      env,
+      text ? `${prompt}\n\nResume text (untrusted data):\n${text}` : prompt,
+    );
+  } catch (error) {
+    if (["TimeoutError", "AbortError"].includes(error.name))
+      throw new Error(
+        "Groq excedeu 25 segundos. A vaga permanece na fila para uma nova tentativa.",
+      );
+    throw error;
+  }
   // Preserve the actual extracted text rather than an LLM transcription.
   if (text) result.text = text;
   return result;

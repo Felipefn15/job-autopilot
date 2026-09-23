@@ -29,7 +29,7 @@ export async function catalog(env, params) {
     .bind(...args)
     .first();
   const rows = await env.DB.prepare(
-    "SELECT id,title,company,location,url,status,score,proof,created_at FROM jobs" +
+    "SELECT id,title,company,location,url,status,score,proof,created_at,substr(description,1,240) AS excerpt FROM jobs" +
       condition +
       (recommended
         ? " ORDER BY score DESC,created_at DESC,id"

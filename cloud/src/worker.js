@@ -82,6 +82,14 @@ export default {
       if (url.pathname === "/api/jobs" && req.method === "GET") {
         return json(await catalog(env, url.searchParams));
       }
+      if (url.pathname === "/api/job-description" && req.method === "GET") {
+        const job = await env.DB.prepare(
+          "SELECT id,description FROM jobs WHERE id=?",
+        )
+          .bind(String(url.searchParams.get("id") || "").slice(0, 128))
+          .first();
+        return job ? json(job) : json({ error: "Vaga não encontrada." }, 404);
+      }
       if (url.pathname === "/api/state" && req.method === "GET") {
         const [config, p, sources, jobs, events, usage, collector] =
           await Promise.all([

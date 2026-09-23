@@ -14,7 +14,43 @@ const labels = {
   submitted: "Enviada",
   unknown: "Verificar envio",
 };
+function JobDescription({ id, api }) {
+  const [text, setText] = useState(null),
+    [error, setError] = useState("");
+  useEffect(() => {
+    let active = true;
+    setText(null);
+    setError("");
+    api(`job-description?id=${encodeURIComponent(id)}`)
+      .then((r) => {
+        if (active)
+          setText(
+            r.description ||
+              "Descrição indisponível. Consulte a vaga original.",
+          );
+      })
+      .catch((e) => {
+        if (active) setError(e.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [id]);
+  return (
+    <section className="job-description">
+      <h3>Descrição da vaga</h3>
+      {error ? (
+        <p role="alert">{error}</p>
+      ) : text === null ? (
+        <p role="status">Carregando descrição…</p>
+      ) : (
+        <p className="description-text">{text}</p>
+      )}
+    </section>
+  );
+}
 function JobCatalog({ view, api, revision }) {
+  const [expanded, setExpanded] = useState(null);
   const [q, setQ] = useState(""),
     [search, setSearch] = useState(""),
     [page, setPage] = useState(1);
@@ -81,6 +117,26 @@ function JobCatalog({ view, api, revision }) {
                     {j.company} · {j.location}
                   </p>
                   <small>{j.proof || "Ainda não avaliada pela IA"}</small>
+                  {j.excerpt && (
+                    <p>
+                      {j.excerpt}
+                      {j.excerpt.length === 240 ? "…" : ""}
+                    </p>
+                  )}
+                  <div>
+                    <button
+                      className="secondary"
+                      aria-expanded={expanded === j.id}
+                      onClick={() =>
+                        setExpanded(expanded === j.id ? null : j.id)
+                      }
+                    >
+                      {expanded === j.id
+                        ? "Ocultar descrição"
+                        : "Ver descrição"}
+                    </button>
+                  </div>
+                  {expanded === j.id && <JobDescription id={j.id} api={api} />}
                 </div>
                 <div>
                   <span className={"status " + j.status}>
@@ -584,6 +640,7 @@ function App() {
                 <pre>{JSON.parse(current.draft).body}</pre>
               </>
             )}
+            <JobDescription id={current.id} api={api} />
             {current.proof && (
               <>
                 <h3>Registro da candidatura</h3>
