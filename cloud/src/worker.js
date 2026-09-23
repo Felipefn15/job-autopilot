@@ -8,6 +8,7 @@ import { emailConfigured } from "./email.js";
 import { cloudLinkedin } from "./linkedin-cloud.js";
 import { retriage } from "./triage.js";
 import { catalog } from "./catalog.js";
+import { verifiedRoles, searchPrompt } from "./search.js";
 export { LinkedInCloud } from "./linkedin-cloud.js";
 const headers = {
   "Content-Type": "application/json; charset=utf-8",
@@ -191,6 +192,23 @@ export default {
           return json({ ok: true, id });
         });
       }
+      if (
+        url.pathname === "/api/profile/search-suggestions" &&
+        req.method === "POST"
+      ) {
+        return await mutateProfile(env, async () => {
+          const p = await profile(env);
+          if (!p?.confirmed)
+            throw new Error("Confirme o currículo antes de refinar a busca.");
+          const result = await ai(env, searchPrompt(p.data.text));
+          const roles = verifiedRoles(result, p.data.text);
+          if (!roles.length)
+            throw new Error(
+              "Não foi possível identificar cargos com evidência no currículo. Preencha os cargos de interesse manualmente.",
+            );
+          return json({ roles });
+        });
+      }
       if (url.pathname === "/api/profile/confirm" && req.method === "POST") {
         const input = await body(req);
         return await mutateProfile(env, async () => {
@@ -209,7 +227,21 @@ export default {
           const data = { ...p.data, text: input.text, fields };
           const config = await settings(env);
           const keywords = resumeKeywords(data.skills);
-          if (keywords) config.keywords = keywords;
+          const priorConfirmed = await env.DB.prepare(
+            "SELECT id FROM profiles WHERE confirmed=1 LIMIT 1",
+          ).first();
+          if (
+            keywords &&
+            (!config.keywords?.trim() ||
+              (!priorConfirmed && config.keywords === "React, Node.js"))
+          )
+            config.keywords = keywords;
+          const roles = verifiedRoles(data, data.text);
+          if (!config.targetRoles?.trim() && roles.length)
+            config.targetRoles = roles
+              .map((r) => r.title)
+              .join(", ")
+              .slice(0, 500);
           await env.DB.batch([
             env.DB.prepare("UPDATE settings SET data=? WHERE id=1").bind(
               JSON.stringify(config),

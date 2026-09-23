@@ -1004,3 +1004,28 @@ footer {
     gap: 12px;
   }
 }
+.catalog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+.catalog-actions .check {
+  margin: 0;
+}
+.search-suggestions {
+  padding: 18px;
+  margin: 16px 0;
+  background: #edf7f4;
+  border: 1px solid #c5e2da;
+  border-radius: 12px;
+}
+.search-suggestions details {
+  margin: 12px 0;
+}
+.search-suggestions details p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

@@ -417,3 +417,69 @@ test("SmartRecruiters collects full descriptions and advances bounded Brazilian 
     env.db.close();
   }
 });
+
+test("catalog normalizes accents and Brazil aliases; legacy facets and profile role OR work together", async () => {
+  const env = fixture();
+  try {
+    await saveJobs(env, { id: "test", value: "hospital", kind: "page" }, {}, [
+      {
+        title: "Enfermeira Sênior",
+        company: "Saúde",
+        location: "Brazil",
+        url: "https://example.com/nurse",
+        description:
+          "Assistência aos pacientes e cuidados de enfermagem, avaliação clínica e acompanhamento dos tratamentos prescritos.",
+      },
+      {
+        title: "Systems Analyst",
+        company: "Systems",
+        location: "Brasil",
+        url: "https://example.com/analyst",
+        description:
+          "Análise de sistemas, desenvolvimento de soluções e levantamento de requisitos junto aos responsáveis pelos projetos.",
+      },
+    ]);
+    env.db.exec("UPDATE jobs SET area=NULL,seniority=NULL");
+    assert.equal(
+      (await catalog(env, new URLSearchParams("q=Brasil"))).total,
+      2,
+    );
+    assert.equal(
+      (
+        await catalog(
+          env,
+          new URLSearchParams("q=saude+Brazil&area=health&seniority=senior"),
+        )
+      ).total,
+      1,
+    );
+    assert.equal(
+      (await catalog(env, new URLSearchParams("q=Brasil&area=operations")))
+        .total,
+      0,
+    );
+    env.db
+      .prepare("UPDATE settings SET data=? WHERE id=1")
+      .run(
+        JSON.stringify({
+          targetRoles: "Enfermeiro, Analista de sistemas",
+          minScore: 60,
+        }),
+      );
+    assert.equal(
+      (await catalog(env, new URLSearchParams("profile=1"))).total,
+      2,
+    );
+    env.db
+      .prepare("UPDATE settings SET data=? WHERE id=1")
+      .run(JSON.stringify({ targetRoles: "Scrum Master", minScore: 60 }));
+    assert.equal(
+      (await catalog(env, new URLSearchParams("profile=1"))).total,
+      0,
+    );
+    assert.equal((await catalog(env, new URLSearchParams())).total, 2);
+    assert.equal((await catalog(env, new URLSearchParams("q=%25"))).total, 0);
+  } finally {
+    env.db.close();
+  }
+});

@@ -30,6 +30,12 @@ function database() {
       "utf8",
     ),
   );
+  db.exec(
+    readFileSync(
+      new URL("../migrations/0011_catalog_search.sql", import.meta.url),
+      "utf8",
+    ),
+  );
   return {
     db,
     DB: {

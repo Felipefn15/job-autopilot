@@ -19,6 +19,12 @@ test("bulk discovery persists jobs, deduplicates URLs and uses bounded database 
       "utf8",
     ),
   );
+  db.exec(
+    readFileSync(
+      new URL("../migrations/0011_catalog_search.sql", import.meta.url),
+      "utf8",
+    ),
+  );
   const env = {
     DB: {
       prepare(sql) {

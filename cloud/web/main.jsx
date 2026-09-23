@@ -71,6 +71,20 @@ function JobDescription({ id, api }) {
   );
 }
 function JobCatalog({ view, api, revision }) {
+  const hasProfileRoles =
+    !!revision.profile?.confirmed && !!revision.config.targetRoles?.trim();
+  const [useProfile, setUseProfile] = useState(hasProfileRoles);
+  const resetFilters = () => {
+    setQ("");
+    setSearch("");
+    setArea("");
+    setSeniority("");
+    setAvailability("");
+    setSource("");
+    setDays("");
+    setPage(1);
+    setUseProfile(false);
+  };
   const [area, setArea] = useState(""),
     [seniority, setSeniority] = useState(""),
     [availability, setAvailability] = useState("");
@@ -87,7 +101,7 @@ function JobCatalog({ view, api, revision }) {
     setResult(null);
     setError("");
     api(
-      `jobs?${new URLSearchParams({ view, page: String(page), q: search, source, days, area, seniority, availability })}`,
+      `jobs?${new URLSearchParams({ view, page: String(page), q: search, source, days, area, seniority, availability, profile: useProfile && hasProfileRoles ? "1" : "0" })}`,
     )
       .then((r) => {
         if (alive) setResult(r);
@@ -108,6 +122,7 @@ function JobCatalog({ view, api, revision }) {
     seniority,
     availability,
     revision,
+    useProfile,
   ]);
   return (
     <section className="catalog-view">
@@ -116,6 +131,30 @@ function JobCatalog({ view, api, revision }) {
           ? "Avaliadas pela IA, da maior compatibilidade para a menor."
           : "Acervo de todas as áreas. Vagas fora das suas preferências também ficam aqui."}
       </p>
+      <div className="catalog-actions">
+        {hasProfileRoles && (
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={useProfile}
+              onChange={(e) => {
+                setUseProfile(e.target.checked);
+                setPage(1);
+              }}
+            />
+            Cargos do meu perfil
+          </label>
+        )}
+        <button className="secondary" onClick={resetFilters}>
+          Limpar filtros
+        </button>
+      </div>
+      {hasProfileRoles && useProfile && (
+        <p className="footnote">
+          Buscando: {revision.config.targetRoles}. Inclui variações conhecidas
+          em português e inglês.
+        </p>
+      )}
       <form
         className="catalog-search"
         onSubmit={(e) => {
@@ -321,7 +360,7 @@ function JobCatalog({ view, api, revision }) {
                 <p>
                   {view === "recommended"
                     ? "As recomendações aparecem após a avaliação da IA. Explore o acervo enquanto novas análises são feitas."
-                    : "Execute novos lotes para ampliar o acervo ou tente outro termo."}
+                    : "Nenhuma vaga corresponde à combinação atual. Limpe os filtros para consultar todo o acervo."}
                 </p>
               </div>
             )}
@@ -988,6 +1027,9 @@ function ResumeProgress({ upload }) {
 }
 function Profile({ data, api, act, busy }) {
   const [upload, setUpload] = useState(null);
+  const [suggestions, setSuggestions] = useState([]),
+    [suggesting, setSuggesting] = useState(false),
+    [suggestionError, setSuggestionError] = useState("");
   const [config, setConfig] = useState(data.config),
     [fields, setFields] = useState(data.profile?.data.fields || {}),
     [text, setText] = useState(data.profile?.data.text || "");
@@ -996,8 +1038,12 @@ function Profile({ data, api, act, busy }) {
     setText(data.profile?.data.text || "");
   }, [data.profile?.id]);
   useEffect(() => {
-    setConfig((current) => ({ ...current, keywords: data.config.keywords }));
-  }, [data.config.keywords, data.profile?.id]);
+    setConfig((current) => ({
+      ...current,
+      keywords: data.config.keywords,
+      targetRoles: data.config.targetRoles,
+    }));
+  }, [data.config.keywords, data.config.targetRoles, data.profile?.id]);
   const update = (key, value) => setConfig({ ...config, [key]: value });
   return (
     <div className="two-column">
@@ -1097,6 +1143,69 @@ function Profile({ data, api, act, busy }) {
       </section>
       <section className="panel">
         <h2>Preferências de busca</h2>
+        <button
+          className="secondary"
+          disabled={!data.profile?.confirmed || suggesting || busy}
+          onClick={async () => {
+            setSuggesting(true);
+            setSuggestionError("");
+            setSuggestions([]);
+            try {
+              const result = await api(
+                "profile/search-suggestions",
+                "POST",
+                {},
+              );
+              setSuggestions(result.roles);
+            } catch (e) {
+              setSuggestionError(e.message);
+            } finally {
+              setSuggesting(false);
+            }
+          }}
+        >
+          {suggesting ? "Analisando experiência…" : "Refinar cargos com IA"}
+        </button>
+        <p className="footnote">
+          Sugestões baseadas no currículo confirmado. Consome a cota de IA.
+        </p>
+        {suggestionError && (
+          <p role="alert" className="error">
+            {suggestionError}
+          </p>
+        )}
+        {suggestions.length > 0 && (
+          <section
+            className="search-suggestions"
+            aria-label="Sugestões de cargos"
+          >
+            <h3>Cargos encontrados no currículo</h3>
+            {suggestions.map((r) => (
+              <details key={r.title}>
+                <summary>{r.title}</summary>
+                <p>{r.evidence}</p>
+              </details>
+            ))}
+            <button
+              className="secondary"
+              onClick={() => {
+                update(
+                  "targetRoles",
+                  suggestions
+                    .map((r) => r.title)
+                    .join(", ")
+                    .slice(0, 500),
+                );
+                setSuggestions([]);
+              }}
+            >
+              Usar sugestões nos campos
+            </button>
+            <p className="footnote">
+              Revise os campos e salve as preferências para atualizar a coleta.
+            </p>
+          </section>
+        )}
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -1141,9 +1250,8 @@ function Profile({ data, api, act, busy }) {
               maxLength={500}
             />
             <small>
-              Preenchidos ao confirmar o currículo. Você pode ajustar os termos
-              antes de salvar as preferências. Termos genéricos como Scrum não
-              bastam para selecionar qualquer cargo que os mencione.
+              Competências do currículo. Os cargos abaixo direcionam a busca;
+              você pode editar ambos.
             </small>
           </label>
           <label>

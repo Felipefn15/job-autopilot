@@ -1,4 +1,5 @@
 import { expandedRoles, normalizeRole } from "./roles.js";
+import { titleArea } from "./search.js";
 export const areas = {
   technology: "Tecnologia",
   projects: "Projetos e agilidade",
@@ -22,33 +23,7 @@ export const levels = {
 // Explicit title signals only: an organizational level is not inferred from years or age.
 export function classifyTitle(title) {
   const t = normalizeRole(title);
-  const area =
-    [
-      [
-        "health",
-        /enferm|nurs|medic|physician|fisioterap|farmaceut|pharmac|dentist|psicolog/,
-      ],
-      [
-        "projects",
-        /scrum|agilista|agile coach|project (manager|analyst|coordinator)|(?:gerente|analista|coordenador).*projeto/,
-      ],
-      [
-        "technology",
-        /software|developer|desenvolv|programador|sistemas|systems analyst|devops|frontend|backend|full.?stack|data (engineer|scientist)|engenheir.*dados/,
-      ],
-      ["engineering", /engenheir|engineer|arquiteto|architect/],
-      ["finance", /financ|contab|accountant|controller|auditor/],
-      [
-        "people",
-        /recursos humanos|human resources|recruit|recrut|talent|people operations/,
-      ],
-      ["commercial", /vendedor|sales|comercial|marketing|customer success/],
-      ["education", /professor|teacher|pedagog|educador/],
-      [
-        "operations",
-        /logistic|operac|operations|supply|compras|recepc|cozinha|warehouse/,
-      ],
-    ].find(([, re]) => re.test(t))?.[0] || "other";
+  const area = titleArea(title);
   const seniority =
     /\b(estagio|estagiario|estagiaria|intern|internship|aprendiz)\b/.test(t)
       ? "intern"

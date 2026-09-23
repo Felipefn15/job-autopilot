@@ -7,6 +7,12 @@ export const normalizeRole = (value) =>
     .replace(/\s+/g, " ")
     .trim();
 const groups = [
+  ["enfermeiro", "enfermeira", "nurse", "registered nurse"],
+  ["analista de sistemas", "systems analyst", "system analyst"],
+  ["engenheiro civil", "engenheira civil", "civil engineer"],
+  ["engenheiro mecanico", "engenheira mecanica", "mechanical engineer"],
+  ["analista financeiro", "analista financeira", "financial analyst"],
+  ["analista de recursos humanos", "hr analyst", "human resources analyst"],
   [
     "gerente de projetos",
     "gerente de projeto",
@@ -45,7 +51,7 @@ export function managementSearch(config = {}) {
   if (roles.length)
     return roles.every(
       (r) =>
-        groups.some((g) => g.includes(r)) ||
+        groups.slice(6).some((g) => g.includes(r)) ||
         /\b(project|projeto|projetos|scrum|agile)\b/.test(r),
     );
   const terms = String(config.keywords || "")

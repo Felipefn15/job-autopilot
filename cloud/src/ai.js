@@ -170,4 +170,4 @@ async function gemini(env, prompt, pdf) {
   );
 }
 export const resumePrompt =
-  'Extract the attached resume faithfully. Return {"text":"complete verbatim extracted resume text preserving wording", "fields":{"name":"...","firstName":"...","lastName":"...","email":"...","phone":"...","location":"...","linkedin":"..."}, "skills":["..."],"summary":"short factual summary in Portuguese"}. Use null for absent fields. Do not infer skill years by adding overlapping jobs.';
+  'Extract the attached resume faithfully. Return {"text":"complete verbatim extracted resume text preserving wording", "fields":{"name":"...","firstName":"...","lastName":"...","email":"...","phone":"...","location":"...","linkedin":"..."}, "skills":["..."],"roles":[{"title":"exact job title explicitly held or desired in resume","evidence":"verbatim resume quote containing that exact title"}],"summary":"short factual summary in Portuguese"}. Use null for absent fields. Do not infer skill years by adding overlapping jobs.';
