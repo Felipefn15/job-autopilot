@@ -99,7 +99,7 @@ export default {
               "SELECT * FROM sources ORDER BY value LIMIT 2000",
             ).all(),
             env.DB.prepare(
-              "SELECT id,title,company,location,url,status,score,analysis,draft,proof,created_at FROM jobs WHERE status NOT IN ('filtered','rejected') ORDER BY created_at DESC LIMIT 200",
+              "SELECT id,title,company,location,url,status,score,analysis,draft,proof,created_at,CASE WHEN datetime(valid_through)<CURRENT_TIMESTAMP THEN 'closed' ELSE availability END AS availability FROM jobs WHERE status NOT IN ('filtered','rejected') ORDER BY created_at DESC LIMIT 200",
             ).all(),
             env.DB.prepare(
               "SELECT * FROM events ORDER BY id DESC LIMIT 30",

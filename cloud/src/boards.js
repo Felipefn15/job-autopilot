@@ -10,6 +10,7 @@ export function boardJobs(kind, data) {
       // Keep the board URL for attribution; do not replace it with a third-party application URL.
       url: j.url,
       description: j.description,
+      published_at: j.publication_date || j.date,
     }))
     .filter((j) => {
       try {

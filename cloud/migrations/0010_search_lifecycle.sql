@@ -1,0 +1,11 @@
+ALTER TABLE sources ADD COLUMN search_state TEXT;
+ALTER TABLE jobs ADD COLUMN area TEXT;
+ALTER TABLE jobs ADD COLUMN seniority TEXT;
+ALTER TABLE jobs ADD COLUMN published_at TEXT;
+ALTER TABLE jobs ADD COLUMN valid_through TEXT;
+ALTER TABLE jobs ADD COLUMN availability TEXT NOT NULL DEFAULT 'unknown';
+ALTER TABLE jobs ADD COLUMN last_seen_at TEXT;
+ALTER TABLE jobs ADD COLUMN analysis_attempts INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE jobs ADD COLUMN analysis_retry_after TEXT;
+CREATE INDEX jobs_analysis_queue ON jobs(status,availability,analysis_retry_after,created_at);
+CREATE INDEX jobs_facets ON jobs(area,seniority,availability);

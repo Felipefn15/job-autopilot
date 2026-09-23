@@ -1,3 +1,4 @@
+import { areas, levels } from "./job-insights.js";
 // Bound every catalog request and parameterize all user-provided filters.
 export async function catalog(env, params) {
   const page = Math.max(
@@ -10,6 +11,23 @@ export async function catalog(env, params) {
   const recommended = params.get("view") === "recommended";
   const where = [],
     args = [];
+  for (const [field, values] of [
+    ["area", areas],
+    ["seniority", levels],
+  ]) {
+    const value = params.get(field);
+    if (Object.hasOwn(values, value || "")) {
+      where.push(`${field}=?`);
+      args.push(value);
+    }
+  }
+  const availability = params.get("availability");
+  if (["open", "closed", "not_listed", "unknown"].includes(availability)) {
+    where.push(
+      "(CASE WHEN datetime(valid_through)<CURRENT_TIMESTAMP THEN 'closed' ELSE availability END)=?",
+    );
+    args.push(availability);
+  }
   const source = params.get("source");
   if (
     [
@@ -35,6 +53,9 @@ export async function catalog(env, params) {
   }
   if (recommended) {
     where.push(
+      "availability NOT IN ('closed','not_listed') AND (valid_through IS NULL OR datetime(valid_through)>=CURRENT_TIMESTAMP)",
+    );
+    where.push(
       "analysis IS NOT NULL AND score >= CAST(json_extract((SELECT data FROM settings WHERE id=1),'$.minScore') AS INTEGER) AND status IN ('matched','needs_input','preparing','sending','submitted','unknown')",
     );
   }
@@ -52,7 +73,7 @@ export async function catalog(env, params) {
     .bind(...args)
     .first();
   const rows = await env.DB.prepare(
-    "SELECT id,title,company,location,url,status,score,proof,created_at,substr(description,1,240) AS excerpt,(SELECT kind FROM sources WHERE sources.id=jobs.source_id) AS source_kind FROM jobs" +
+    "SELECT id,title,company,location,url,status,score,proof,created_at,area,seniority,CASE WHEN datetime(valid_through)<CURRENT_TIMESTAMP THEN 'closed' ELSE availability END AS availability,published_at,last_seen_at,substr(description,1,240) AS excerpt,(SELECT kind FROM sources WHERE sources.id=jobs.source_id) AS source_kind FROM jobs" +
       condition +
       (recommended
         ? " ORDER BY score DESC,created_at DESC,id"

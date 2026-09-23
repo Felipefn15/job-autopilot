@@ -14,6 +14,11 @@ import { selectSources } from "./community.js";
 import { sendEmail, emailConfigured } from "./email.js";
 import { browserApply } from "./browser.js";
 import { reserveBrowserSeconds } from "./linkedin-cloud-core.js";
+import {
+  nextAnalysis,
+  deferAnalysis,
+  refreshMetadata,
+} from "./job-insights.js";
 import { triageJob, retriage } from "./triage.js";
 export async function analyze(env, job, p, config) {
   const a = await ai(
@@ -55,6 +60,13 @@ export async function apply(env, id, p, config) {
   if (!job || job.status !== "matched" || job.profile_id !== p.id)
     throw new Error("Candidatura não está pronta para este currículo.");
   if (!p.confirmed) throw new Error("Confirme o perfil extraído do currículo.");
+  if (
+    ["closed", "not_listed"].includes(job.availability) ||
+    (job.valid_through && Date.parse(job.valid_through) < Date.now())
+  )
+    throw new Error(
+      "Vaga expirada ou não listada na fonte. Confira o anúncio antes de candidatar-se.",
+    );
   const verdict = triageJob(job, config);
   if (!verdict.pass) {
     await status(env, id, "filtered", verdict.reason);
@@ -192,21 +204,19 @@ export async function tick(env, manual = false, applyId = null) {
         .bind(error, error, source.id)
         .run();
     }
+    await refreshMetadata(env);
     const currentTriage = await retriage(env, config);
-    const job = await env.DB.prepare(
-      "SELECT * FROM jobs WHERE status='discovered' AND triage_key=? ORDER BY created_at LIMIT 1",
-    )
-      .bind(currentTriage)
-      .first();
+    const job = await nextAnalysis(env, config, currentTriage);
     if (job)
       try {
         await analyze(env, job, p, config);
       } catch (e) {
+        await deferAnalysis(env, job.id);
         await event(env, "analysis_error", e.message, job.id);
       }
     if (config.autoApply) {
       const ready = await env.DB.prepare(
-        "SELECT id FROM jobs WHERE status='matched' AND profile_id=? ORDER BY score DESC LIMIT 1",
+        "SELECT id FROM jobs WHERE status='matched' AND availability NOT IN ('closed','not_listed') AND (valid_through IS NULL OR datetime(valid_through)>=CURRENT_TIMESTAMP) AND profile_id=? ORDER BY score DESC LIMIT 1",
       )
         .bind(p.id)
         .first();

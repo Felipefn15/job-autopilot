@@ -5,6 +5,7 @@ import { workplaceLocation } from "./roles.js";
 import { githubJobs, telegramJobs, sourceWindow } from "./community.js";
 import { linkedinUrl, parseLinkedinPost, linkedinJob } from "./linkedin.js";
 import { boardJobs } from "./boards.js";
+import { classifyTitle, searchPlan } from "./job-insights.js";
 export function sourceSpec(kind, value) {
   if (
     ![
@@ -131,6 +132,8 @@ export function parseStructuredJobs(html, base) {
           .join(", "),
         url: x.url ? new URL(x.url, base).href : base,
         description: x.description,
+        published_at: x.datePosted,
+        valid_through: x.validThrough,
       });
     }
     if (x["@graph"]) walk(x["@graph"]);
@@ -150,16 +153,33 @@ export async function discover(env, source, config) {
   let jobs = [];
   let nextCursor = 0;
   const slug = encodeURIComponent(source.value);
+  const plan = searchPlan(source, config);
+  let directed = false;
   if (["remotive", "remoteok"].includes(source.kind)) {
     const endpoint =
       source.kind === "remotive"
         ? "https://remotive.com/api/remote-jobs"
         : "https://remoteok.com/api";
-    jobs = boardJobs(source.kind, JSON.parse(await fetchText(endpoint)));
+    directed = source.kind === "remotive" && plan.targeted;
+    jobs = boardJobs(
+      source.kind,
+      JSON.parse(
+        await fetchText(
+          endpoint +
+            (directed ? `?search=${encodeURIComponent(plan.term)}` : ""),
+        ),
+      ),
+    );
+    if (directed) plan.state.index = (plan.state.index || 0) + 1;
   } else if (source.kind === "smartrecruiters") {
-    const offset = Math.max(0, Number(source.cursor) || 0);
+    directed = plan.targeted;
+    const offset = Math.max(
+      0,
+      Number(directed ? plan.state.offset : source.cursor) || 0,
+    );
     const query = new URLSearchParams({ limit: "5", offset: String(offset) });
     if (source.location_filter) query.set("country", source.location_filter);
+    if (directed) query.set("q", plan.term);
     const base = `https://api.smartrecruiters.com/v1/companies/${slug}/postings`;
     const list = JSON.parse(await fetchText(`${base}?${query}`, 2000000));
     if (!Array.isArray(list.content))
@@ -186,12 +206,18 @@ export async function discover(env, source, config) {
         description: Object.values(d.jobAd?.sections || {})
           .map((s) => s.text || "")
           .join("\n"),
+        published_at: d.releasedDate,
       });
     }
     nextCursor =
       offset + list.content.length < Number(list.totalFound)
         ? offset + list.content.length
         : 0;
+    if (directed) {
+      plan.state.offset = nextCursor;
+      if (!nextCursor) plan.state.index = (plan.state.index || 0) + 1;
+      nextCursor = Number(source.cursor) || 0;
+    }
   } else if (source.kind === "github") {
     const repo = sourceSpec("github", source.value).value;
     const page = Math.max(1, Math.min(10, Number(source.cursor) || 1));
@@ -224,6 +250,7 @@ export async function discover(env, source, config) {
       location: j.location?.name,
       url: j.absolute_url,
       description: j.content,
+      published_at: j.first_published,
     }));
   } else if (source.kind === "lever") {
     const skip = Math.max(0, Number(source.cursor) || 0);
@@ -260,6 +287,7 @@ export async function discover(env, source, config) {
         location: workplaceLocation(j, j.location),
         url: j.applyUrl || j.jobUrl,
         description: j.descriptionPlain || j.descriptionHtml,
+        published_at: j.publishedAt,
       }));
   } else if (source.kind === "linkedin") {
     jobs = [
@@ -290,13 +318,38 @@ export async function discover(env, source, config) {
         "Página sem JobPosting estruturado. Cadastre a página individual da vaga ou um ATS.",
       );
   }
-  const stats = { received: jobs.length };
+  // These endpoints return a complete, unfiltered public board before local slicing.
+  // Missing from this snapshot is NOT treated as confirmed closure.
+  if (["greenhouse", "ashby"].includes(source.kind) && jobs.length) {
+    const urls = jobs
+      .map((j) => {
+        try {
+          return publicUrl(j.url);
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+    if (urls.length)
+      await env.DB.prepare(
+        "UPDATE jobs SET availability=CASE WHEN url IN (SELECT value FROM json_each(?)) THEN 'open' ELSE 'not_listed' END,last_seen_at=CASE WHEN url IN (SELECT value FROM json_each(?)) THEN CURRENT_TIMESTAMP ELSE last_seen_at END WHERE source_id=? AND (valid_through IS NULL OR datetime(valid_through)>=CURRENT_TIMESTAMP)",
+      )
+        .bind(JSON.stringify(urls), JSON.stringify(urls), source.id)
+        .run();
+  }
+  const stats = { received: jobs.length, query: directed ? plan.term : null };
   if (["greenhouse", "ashby", "remotive", "remoteok"].includes(source.kind)) {
-    const window = sourceWindow(jobs, source.cursor);
+    const window = sourceWindow(jobs, directed ? 0 : source.cursor);
     jobs = window.jobs;
-    nextCursor = window.cursor;
+    nextCursor = directed ? Number(source.cursor) || 0 : window.cursor;
   }
   const saved = await saveJobs(env, source, config, jobs, stats);
+  if (["remotive", "smartrecruiters"].includes(source.kind)) {
+    plan.state.turn = (plan.state.turn || 0) + 1;
+    await env.DB.prepare("UPDATE sources SET search_state=? WHERE id=?")
+      .bind(JSON.stringify(plan.state), source.id)
+      .run();
+  }
   await env.DB.prepare("UPDATE sources SET cursor=?,last_stats=? WHERE id=?")
     .bind(nextCursor, JSON.stringify(stats), source.id)
     .run();
@@ -317,6 +370,11 @@ export async function saveJobs(env, source, config, jobs, stats = {}) {
       .bind(JSON.stringify(pending))
       .run();
     saved += r.meta.changes;
+    await env.DB.prepare(
+      "UPDATE jobs SET area=COALESCE(jobs.area,json_extract(j.value,'$.area')),seniority=COALESCE(jobs.seniority,json_extract(j.value,'$.seniority')),published_at=COALESCE(jobs.published_at,json_extract(j.value,'$.published_at')),valid_through=COALESCE(json_extract(j.value,'$.valid_through'),jobs.valid_through),last_seen_at=CURRENT_TIMESTAMP,availability=CASE WHEN datetime(COALESCE(json_extract(j.value,'$.valid_through'),jobs.valid_through))<CURRENT_TIMESTAMP THEN 'closed' ELSE 'open' END FROM json_each(?) AS j WHERE jobs.id=json_extract(j.value,'$.id')",
+    )
+      .bind(JSON.stringify(pending))
+      .run();
     pending = [];
     bytes = 2;
   }
@@ -360,6 +418,13 @@ export async function saveJobs(env, source, config, jobs, stats = {}) {
       status: verdict.pass ? "discovered" : "filtered",
       proof: verdict.reason,
       triage_key: key,
+      ...classifyTitle(j.title),
+      published_at: Number.isFinite(Date.parse(j.published_at))
+        ? new Date(j.published_at).toISOString()
+        : null,
+      valid_through: Number.isFinite(Date.parse(j.valid_through))
+        ? new Date(j.valid_through).toISOString()
+        : null,
     };
     const size = encoder.encode(JSON.stringify(row)).length + 1;
     if (bytes + size > 1000000) await flush();
@@ -372,7 +437,7 @@ export async function saveJobs(env, source, config, jobs, stats = {}) {
   await event(
     env,
     "discovery",
-    `${source.kind}/${source.value}: ${stats.received} recebidas, ${stats.scanned} examinadas, ${stats.filtered} fora das preferências, ${stats.invalid} incompletas, ${stats.duplicates} já cadastradas, ${saved} novas. ${Object.entries(
+    `${source.kind}/${source.value}${stats.query ? ` (busca: ${stats.query})` : ""}: ${stats.received} recebidas, ${stats.scanned} examinadas, ${stats.filtered} fora das preferências, ${stats.invalid} incompletas, ${stats.duplicates} já cadastradas, ${saved} novas. ${Object.entries(
       stats.reasons,
     )
       .map(([reason, n]) => `${n}: ${reason}`)

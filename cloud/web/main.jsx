@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import "./style.css";
 import { countryOptions, countrySelection } from "./countries.js";
 import { managementSearch } from "../src/roles.js";
+import { areas, levels } from "../src/job-insights.js";
 const labels = {
   discovered: "Aguardando análise",
   filtered: "Fora das preferências",
@@ -70,6 +71,9 @@ function JobDescription({ id, api }) {
   );
 }
 function JobCatalog({ view, api, revision }) {
+  const [area, setArea] = useState(""),
+    [seniority, setSeniority] = useState(""),
+    [availability, setAvailability] = useState("");
   const [source, setSource] = useState(""),
     [days, setDays] = useState("");
   const [expanded, setExpanded] = useState(null);
@@ -83,7 +87,7 @@ function JobCatalog({ view, api, revision }) {
     setResult(null);
     setError("");
     api(
-      `jobs?${new URLSearchParams({ view, page: String(page), q: search, source, days })}`,
+      `jobs?${new URLSearchParams({ view, page: String(page), q: search, source, days, area, seniority, availability })}`,
     )
       .then((r) => {
         if (alive) setResult(r);
@@ -94,7 +98,17 @@ function JobCatalog({ view, api, revision }) {
     return () => {
       alive = false;
     };
-  }, [view, page, search, source, days, revision]);
+  }, [
+    view,
+    page,
+    search,
+    source,
+    days,
+    area,
+    seniority,
+    availability,
+    revision,
+  ]);
   return (
     <section className="catalog-view">
       <p>
@@ -119,6 +133,56 @@ function JobCatalog({ view, api, revision }) {
         <button>Buscar</button>
       </form>
       <div className="catalog-filters">
+        <label>
+          Área (pelo título)
+          <select
+            value={area}
+            onChange={(e) => {
+              setArea(e.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">Todas as áreas</option>
+            {Object.entries(areas).map(([k, v]) => (
+              <option key={k} value={k}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Senioridade (pelo título)
+          <select
+            value={seniority}
+            onChange={(e) => {
+              setSeniority(e.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">Todos os níveis</option>
+            {Object.entries(levels).map(([k, v]) => (
+              <option key={k} value={k}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Disponibilidade
+          <select
+            value={availability}
+            onChange={(e) => {
+              setAvailability(e.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">Todas</option>
+            <option value="open">Vista na fonte</option>
+            <option value="not_listed">Não listada na fonte</option>
+            <option value="closed">Prazo encerrado</option>
+            <option value="unknown">Não verificada</option>
+          </select>
+        </label>
         <label>
           Fonte
           <select
@@ -187,6 +251,31 @@ function JobCatalog({ view, api, revision }) {
                   </p>
                   <small>{j.proof || "Ainda não avaliada pela IA"}</small>
                   <JobOrigin url={j.url} kind={j.source_kind} />
+                  <div className="search-tags">
+                    <span>
+                      {areas[j.area] || "Área ainda não classificada"}
+                    </span>
+                    <span>
+                      {levels[j.seniority] || "Nível ainda não classificado"}
+                    </span>
+                    <span>
+                      {
+                        {
+                          open: "Vista na fonte",
+                          closed: "Prazo encerrado",
+                          not_listed: "Não listada na fonte",
+                          unknown: "Não verificada",
+                        }[j.availability]
+                      }
+                    </span>
+                  </div>
+                  {j.published_at && (
+                    <small>
+                      Publicada em{" "}
+                      {new Date(j.published_at).toLocaleDateString("pt-BR")}{" "}
+                      ·{" "}
+                    </small>
+                  )}
                   <small>
                     Adicionada em{" "}
                     {new Date(j.created_at + "Z").toLocaleDateString("pt-BR")}
@@ -705,6 +794,14 @@ function App() {
               Abrir vaga original ↗
             </a>
             <JobOrigin url={current.url} />
+            {["closed", "not_listed"].includes(current.availability) && (
+              <p className="search-alert">
+                {current.availability === "closed"
+                  ? "Prazo da vaga encerrado."
+                  : "Vaga não listada na última consulta completa à fonte."}{" "}
+                Candidatura automática bloqueada.
+              </p>
+            )}
             {current.analysis && (
               <Analysis value={JSON.parse(current.analysis)} />
             )}{" "}
@@ -722,19 +819,20 @@ function App() {
                 <pre>{current.proof}</pre>
               </>
             )}
-            {current.status === "matched" && (
-              <button
-                disabled={busy}
-                onClick={() =>
-                  act(
-                    () => api("apply", "POST", { id: current.id }),
-                    "Processamento concluído. Confira o status da candidatura.",
-                  )
-                }
-              >
-                Enviar candidatura
-              </button>
-            )}
+            {current.status === "matched" &&
+              !["closed", "not_listed"].includes(current.availability) && (
+                <button
+                  disabled={busy}
+                  onClick={() =>
+                    act(
+                      () => api("apply", "POST", { id: current.id }),
+                      "Processamento concluído. Confira o status da candidatura.",
+                    )
+                  }
+                >
+                  Enviar candidatura
+                </button>
+              )}
             {["unknown", "needs_input"].includes(current.status) && (
               <fieldset>
                 <legend>Após verificar o site ou a pasta Enviados</legend>

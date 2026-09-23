@@ -5,6 +5,13 @@ import { readFileSync, readdirSync } from "node:fs";
 import { catalog } from "../src/catalog.js";
 import { saveJobs, discover } from "../src/discovery.js";
 import { boardJobs } from "../src/boards.js";
+import { nextAnalysis, deferAnalysis } from "../src/job-insights.js";
+import {
+  classifyTitle,
+  searchPlan,
+  prioritize,
+  refreshMetadata,
+} from "../src/job-insights.js";
 function fixture() {
   const db = new DatabaseSync(":memory:");
   const dir = new URL("../migrations/", import.meta.url);
@@ -13,6 +20,9 @@ function fixture() {
   return {
     db,
     DB: {
+      async batch(items) {
+        return Promise.all(items.map((i) => i.run()));
+      },
       prepare(sql) {
         let args = [];
         return {
@@ -34,6 +44,202 @@ function fixture() {
     },
   };
 }
+test("failed analysis defers retries without blocking another candidate or changing application history", async () => {
+  const env = fixture();
+  try {
+    const base = {
+      title: "Scrum Master",
+      company: "Company",
+      location: "Remote",
+      description:
+        "Facilitação de cerimônias e acompanhamento das entregas de projetos com equipes de diferentes áreas.",
+    };
+    await saveJobs(env, { id: "queue", kind: "page", value: "Company" }, {}, [
+      { ...base, url: "https://example.com/queue1" },
+      { ...base, url: "https://example.com/queue2" },
+    ]);
+    const key = env.db
+      .prepare("SELECT triage_key FROM jobs LIMIT 1")
+      .get().triage_key;
+    const first = await nextAnalysis(env, {}, key);
+    await deferAnalysis(env, first.id);
+    const second = await nextAnalysis(env, {}, key);
+    assert.notEqual(second.id, first.id);
+    await deferAnalysis(env, first.id);
+    await deferAnalysis(env, first.id);
+    const delayed = env.db
+      .prepare(
+        "SELECT status,analysis_attempts,analysis_retry_after FROM jobs WHERE id=?",
+      )
+      .get(first.id);
+    assert.equal(delayed.status, "discovered");
+    assert.equal(delayed.analysis_attempts, 3);
+    assert.ok(
+      Date.parse(delayed.analysis_retry_after + "Z") >
+        Date.now() + 23 * 3600000,
+    );
+    env.db
+      .prepare("UPDATE jobs SET availability='closed' WHERE id=?")
+      .run(second.id);
+    assert.equal(await nextAnalysis(env, {}, key), undefined);
+  } finally {
+    env.db.close();
+  }
+});
+test("SmartRecruiters sends directed query and preserves the general pagination cursor", async (t) => {
+  const env = fixture();
+  const requested = [];
+  t.mock.method(globalThis, "fetch", async (url) => {
+    requested.push(new URL(url));
+    return Response.json({ totalFound: 0, content: [] });
+  });
+  try {
+    const source = {
+      id: "br-sr-bosch",
+      value: "BoschGroup",
+      kind: "smartrecruiters",
+      cursor: 15,
+      location_filter: "br",
+    };
+    await discover(env, source, { targetRoles: "Scrum master" });
+    assert.equal(requested[0].searchParams.get("q"), "scrum master");
+    assert.equal(requested[0].searchParams.get("offset"), "0");
+    const persisted = env.db
+      .prepare("SELECT * FROM sources WHERE id='br-sr-bosch'")
+      .get();
+    assert.equal(persisted.cursor, 15);
+    await discover(env, persisted, { targetRoles: "Scrum master" });
+    assert.equal(requested[1].searchParams.has("q"), false);
+    assert.equal(requested[1].searchParams.get("offset"), "15");
+  } finally {
+    env.db.close();
+  }
+});
+test("multi-profession title signals do not infer missing seniority", () => {
+  assert.deepEqual(classifyTitle("Enfermeiro Júnior"), {
+    area: "health",
+    seniority: "junior",
+  });
+  assert.equal(classifyTitle("Engenheira Civil Sênior").area, "engineering");
+  assert.equal(classifyTitle("Analista de Sistemas Pleno").seniority, "mid");
+  assert.equal(classifyTitle("Scrum Master").seniority, "unknown");
+});
+test("directed search alternates with catalog collection and resets on preference changes", () => {
+  const config = { targetRoles: "Scrum master" };
+  const first = searchPlan({}, config);
+  assert.equal(first.term, "scrum master");
+  const next = searchPlan(
+    { search_state: JSON.stringify({ ...first.state, turn: 1 }) },
+    config,
+  );
+  assert.equal(next.targeted, false);
+  assert.equal(
+    searchPlan(
+      { search_state: JSON.stringify({ ...first.state, turn: 1 }) },
+      { targetRoles: "Enfermeiro" },
+    ).term,
+    "enfermeiro",
+  );
+});
+test("priority favors title matches but aging eventually gives older candidates a turn", () => {
+  const now = Date.parse("2026-09-23T12:00:00Z");
+  const a = {
+    id: "a",
+    title: "Scrum Master",
+    created_at: "2026-09-23 10:00:00",
+  };
+  const b = {
+    id: "b",
+    title: "Agile facilitator",
+    created_at: "2026-09-22 10:00:00",
+  };
+  assert.equal(
+    prioritize([b, a], { targetRoles: "Scrum master" }, now).id,
+    "a",
+  );
+  assert.equal(
+    prioritize(
+      [{ ...b, created_at: "2026-07-01 10:00:00" }, a],
+      { targetRoles: "Scrum master" },
+      now,
+    ).id,
+    "b",
+  );
+});
+test("full-board absence is not confirmed closure; expiration blocks recommendations; sightings reopen listings", async (t) => {
+  const env = fixture();
+  const source = { id: "life", kind: "greenhouse", value: "example" };
+  const job = {
+    title: "Enfermeiro Sênior",
+    company: "Saúde",
+    location: "Brazil",
+    url: "https://example.com/old",
+    description:
+      "Assistência de enfermagem, acompanhamento dos pacientes e administração de tratamentos conforme prescrição.",
+  };
+  try {
+    await saveJobs(env, source, {}, [job]);
+    t.mock.method(globalThis, "fetch", async () =>
+      Response.json({
+        jobs: [
+          {
+            title: "Outra vaga",
+            absolute_url: "https://example.com/new",
+            content: job.description,
+            location: { name: "Brazil" },
+          },
+        ],
+      }),
+    );
+    await discover(env, source, {});
+    assert.equal(
+      env.db
+        .prepare(
+          "SELECT availability FROM jobs WHERE url='https://example.com/old'",
+        )
+        .get().availability,
+      "not_listed",
+    );
+    await saveJobs(env, source, {}, [job]);
+    assert.equal(
+      env.db
+        .prepare(
+          "SELECT availability FROM jobs WHERE url='https://example.com/old'",
+        )
+        .get().availability,
+      "open",
+    );
+    env.db.exec(
+      "UPDATE jobs SET status='matched',score=99,analysis='{}',valid_through='2000-01-01T00:00:00Z' WHERE url='https://example.com/old'",
+    );
+    assert.equal(
+      (await catalog(env, new URLSearchParams("view=recommended"))).total,
+      0,
+    );
+    assert.equal(
+      (
+        await catalog(
+          env,
+          new URLSearchParams(
+            "availability=closed&area=health&seniority=senior",
+          ),
+        )
+      ).total,
+      1,
+    );
+    await refreshMetadata(env);
+    assert.equal(
+      env.db
+        .prepare(
+          "SELECT availability FROM jobs WHERE url='https://example.com/old'",
+        )
+        .get().availability,
+      "closed",
+    );
+  } finally {
+    env.db.close();
+  }
+});
 test("public boards skip metadata, retain attribution URLs and do not invent worldwide eligibility", () => {
   const jobs = boardJobs("remoteok", [
     { legal: "terms" },

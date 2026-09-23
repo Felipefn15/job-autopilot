@@ -13,6 +13,12 @@ test("bulk discovery persists jobs, deduplicates URLs and uses bounded database 
   );
   let writes = 0;
   db.exec("ALTER TABLE jobs ADD COLUMN triage_key TEXT");
+  db.exec(
+    readFileSync(
+      new URL("../migrations/0010_search_lifecycle.sql", import.meta.url),
+      "utf8",
+    ),
+  );
   const env = {
     DB: {
       prepare(sql) {
@@ -60,7 +66,7 @@ test("bulk discovery persists jobs, deduplicates URLs and uses bounded database 
       ),
       0,
     );
-    assert.equal(writes, 4);
+    assert.equal(writes, 6);
   } finally {
     db.close();
   }

@@ -24,6 +24,12 @@ function database() {
     "INSERT INTO profiles(id,filename,pdf,data,confirmed) VALUES('p','cv.pdf','x','{}',1)",
   );
   db.exec("ALTER TABLE jobs ADD COLUMN triage_key TEXT");
+  db.exec(
+    readFileSync(
+      new URL("../migrations/0010_search_lifecycle.sql", import.meta.url),
+      "utf8",
+    ),
+  );
   return {
     db,
     DB: {

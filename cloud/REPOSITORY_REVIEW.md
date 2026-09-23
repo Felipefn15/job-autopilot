@@ -37,6 +37,10 @@ na análise. O pré-filtro não substitui a avaliação de elegibilidade.
 
 ## Decisões e próximas extensões
 
+Atualização: parte das prioridades abaixo foi implementada posteriormente na
+migração 0010; consulte [SEARCH_EVOLUTION.md](SEARCH_EVOLUTION.md) para escopo
+entregue, testes e limitações.
+
 O padrão de coleta por consulta do jobsparser é relevante para reduzir o tempo
 até encontrar cargos específicos. Não portamos seus scrapers de LinkedIn/Indeed
 sem validar interfaces, estabilidade e consumo no Worker. O LinkedIn existente
