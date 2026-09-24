@@ -101,6 +101,11 @@ export async function reserveBrowserSeconds(env, seconds) {
     new Date(Date.now() + seconds * 1000).toISOString().slice(0, 10)
   )
     return false;
+  if (
+    env.GLOBAL_DB &&
+    !(await reserveBrowserSeconds({ DB: env.GLOBAL_DB }, seconds))
+  )
+    return false;
   const row = await env.DB.prepare(
     "INSERT INTO usage(day,kind,count) SELECT date('now'),'browser_seconds',? + COALESCE((SELECT count*150 FROM usage WHERE day=date('now') AND kind='browser'),0) WHERE ? + COALESCE((SELECT count*150 FROM usage WHERE day=date('now') AND kind='browser'),0) <= 540 ON CONFLICT(day,kind) DO UPDATE SET count=count+? WHERE count+?<=540 RETURNING count",
   )

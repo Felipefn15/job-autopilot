@@ -16,6 +16,8 @@ export async function event(env, kind, detail, jobId = null) {
 }
 export async function reserve(env, kind, limit) {
   if (!Number.isInteger(limit) || limit < 1) return false;
+  if (env.GLOBAL_DB && !(await reserve({ DB: env.GLOBAL_DB }, kind, limit)))
+    return false;
   const row = await env.DB.prepare(
     "INSERT INTO usage(day,kind,count) VALUES(date('now'),?,1) ON CONFLICT(day,kind) DO UPDATE SET count=count+1 WHERE count < ? RETURNING count",
   )

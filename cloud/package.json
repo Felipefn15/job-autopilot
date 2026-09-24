@@ -10,7 +10,9 @@
     "check": "npm run build && wrangler deploy --dry-run",
     "db:local": "wrangler d1 migrations apply DB --local",
     "db:remote": "wrangler d1 migrations apply DB --remote",
-    "deploy": "npm run build && wrangler deploy"
+    "deploy": "npm run build && wrangler deploy",
+    "prebuild": "node scripts/workspace-schema.mjs",
+    "pretest": "node scripts/workspace-schema.mjs"
   },
   "dependencies": {
     "@cloudflare/playwright": "^1.3.6",

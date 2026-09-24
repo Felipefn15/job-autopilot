@@ -15,6 +15,7 @@ const reply = (value, status = 200) =>
   Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
 class UserError extends Error {}
 export function cloudLinkedin(env, action) {
+  if (env.USER_LINKEDIN) return env.USER_LINKEDIN(action);
   if (!env.LINKEDIN_CLOUD)
     throw new Error("Publique a configuração do navegador LinkedIn.");
   return env.LINKEDIN_CLOUD.get(env.LINKEDIN_CLOUD.idFromName("owner")).fetch(

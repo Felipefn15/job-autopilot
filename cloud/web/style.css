@@ -1029,3 +1029,147 @@ footer {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+.auth-layout {
+  padding: 0;
+  max-width: none;
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: white;
+}
+.auth-story {
+  background: #11212f;
+  color: #e8f3f6;
+  padding: clamp(32px, 6vw, 100px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.auth-story .brand {
+  color: white;
+  font-size: 24px;
+}
+.auth-story h1 {
+  color: white;
+  font-size: clamp(30px, 3vw, 46px);
+  line-height: 1.15;
+  max-width: 500px;
+}
+.auth-story p {
+  color: #b9cbd5;
+  max-width: 440px;
+  font-size: 18px;
+}
+.auth-story ol {
+  padding-left: 24px;
+  line-height: 2.2;
+  color: #b9cbd5;
+}
+.auth-art {
+  width: min(100%, 320px);
+  margin: 32px 0;
+}
+.auth-form-panel {
+  width: min(100%, 540px);
+  padding: 60px 36px;
+  margin: auto;
+}
+.auth-form-panel h2 {
+  font-size: 32px;
+  margin-bottom: 12px;
+}
+.auth-form-panel form > button {
+  width: 100%;
+  margin-top: 16px;
+}
+.auth-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 20px;
+}
+.text-button {
+  background: transparent;
+  color: #12695e;
+  padding: 6px 0;
+  border: 0;
+}
+.legacy-access {
+  border-top: 1px solid #dce5ec;
+  margin-top: 32px;
+  padding-top: 22px;
+  color: #526a80;
+}
+.legacy-access p {
+  font-size: 14px;
+}
+.login-error {
+  position: fixed;
+  bottom: 12px;
+  right: 24px;
+  max-width: 420px;
+  background: white;
+  padding: 16px;
+}
+.recovery-card,
+.welcome-flow {
+  padding: 24px;
+  margin-bottom: 24px;
+  border: 1px solid #bfded5;
+  border-radius: 14px;
+  background: #eaf7f2;
+}
+.recovery-card code {
+  display: block;
+  background: white;
+  padding: 16px;
+  margin: 16px 0;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.welcome-flow ol {
+  display: flex;
+  list-style: none;
+  gap: 16px;
+  padding: 0;
+  flex-wrap: wrap;
+}
+.welcome-flow li {
+  padding: 10px 14px;
+  background: white;
+  border-radius: 8px;
+  color: #526a80;
+}
+.welcome-flow .current {
+  background: #12695e;
+  color: white;
+}
+.welcome-flow .done {
+  color: #12695e;
+}
+.account-panel {
+  max-width: 680px;
+}
+@media (max-width: 760px) {
+  .auth-layout {
+    grid-template-columns: 1fr;
+  }
+  .auth-story {
+    padding: 28px;
+  }
+  .auth-story h1 {
+    font-size: 28px;
+  }
+  .auth-art,
+  .auth-story ol {
+    display: none;
+  }
+  .auth-form-panel {
+    padding: 32px 24px;
+  }
+  .welcome-flow ol {
+    flex-direction: column;
+  }
+}

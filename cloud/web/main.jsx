@@ -1,3 +1,4 @@
+import { AuthScreen, AccountSettings } from "./Account.jsx";
 import React, { useState, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
@@ -389,7 +390,8 @@ function JobCatalog({ view, api, revision }) {
 }
 function App() {
   const [token, setToken] = useState(""),
-    [input, setInput] = useState(""),
+    [booting, setBooting] = useState(true),
+    [recoveryCode, setRecoveryCode] = useState(""),
     [data, setData] = useState(null),
     [tab, setTab] = useState("overview"),
     [error, setError] = useState(""),
@@ -400,8 +402,10 @@ function App() {
   async function api(path, method = "GET", body) {
     const r = await fetch("/api/" + path, {
       method,
+      credentials: "same-origin",
       headers: {
-        Authorization: "Bearer " + token,
+        "X-Requested-With": "JobAutopilot",
+        ...(token ? { Authorization: "Bearer " + token } : {}),
         ...(body instanceof FormData
           ? {}
           : { "Content-Type": "application/json" }),
@@ -414,7 +418,12 @@ function App() {
             : JSON.stringify(body),
     });
     const j = await r.json();
-    if (!r.ok) throw Error(j.error || "Falha na operação.");
+    if (!r.ok) {
+      if (r.status === 401 && !path.startsWith("auth/")) setData(null);
+      const error = Error(j.error || "Falha na operação.");
+      error.status = r.status;
+      throw error;
+    }
     return j;
   }
   async function refresh() {
@@ -436,50 +445,74 @@ function App() {
       setBusy(false);
     }
   }
+  async function logout() {
+    try {
+      await api("auth/logout", "POST", {});
+    } catch (e) {
+      setError(e.message);
+      return;
+    }
+    setToken("");
+    setData(null);
+    setRecoveryCode("");
+    setSelected(null);
+    setNotice("");
+    setError("");
+    setTab("overview");
+  }
   useEffect(() => {
-    if (token)
-      refresh().catch((e) => {
-        setError(e.message);
-        setToken("");
+    let active = true;
+    setBooting(true);
+    api("state")
+      .then((result) => {
+        if (active) {
+          setData(result);
+          if (result.user && !result.profile?.confirmed) setTab("profile");
+        }
+      })
+      .catch((e) => {
+        if (active) {
+          if (token || e.status !== 401) setError(e.message);
+          setData(null);
+        }
+      })
+      .finally(() => {
+        if (active) setBooting(false);
       });
+    return () => {
+      active = false;
+    };
   }, [token]);
-  if (!data)
+  if (booting)
     return (
       <main className="login">
         <div className="mark">JA</div>
-        <h1>Job Autopilot</h1>
-        <p>Seu currículo. Oportunidades com contexto.</p>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
+        <p role="status">Abrindo sua área…</p>
+      </main>
+    );
+  if (!data)
+    return (
+      <>
+        <AuthScreen
+          api={api}
+          onAuthenticated={async (result) => {
             setError("");
-            setToken(input);
-            setInput("");
+            setRecoveryCode(result.recoveryCode || "");
+            const state = await api("state");
+            setData(state);
+            setTab(state.profile?.confirmed ? "overview" : "profile");
           }}
-        >
-          <label>
-            Chave de acesso privada
-            <input
-              type="password"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              autoComplete="current-password"
-              required
-              minLength={32}
-            />
-          </label>
-          <button>Entrar no painel</button>
-        </form>
+          onAdmin={(key) => {
+            setError("");
+            setToken(key);
+          }}
+        />
         {error && (
-          <p className="error" role="alert">
+          <p className="login-error error" role="alert">
             {error}
           </p>
         )}
-        <small>
-          A chave permanece apenas nesta aba. Configure APP_TOKEN na hospedagem
-          para o primeiro acesso.
-        </small>
-      </main>
+      </>
     );
   const jobs = data.jobs,
     counts = Object.fromEntries(
@@ -497,6 +530,7 @@ function App() {
     ["profile", "Currículo e preferências"],
     ["sources", "Fontes"],
     ["history", "Atividade"],
+    ...(data.user ? [["account", "Minha conta"]] : []),
   ];
   const current = jobs.find((j) => j.id === selected);
   const visibleJobs = jobs.filter(
@@ -531,19 +565,51 @@ function App() {
         </nav>
         <div className="sidebar-bottom">
           <span className="pill">PLANO GRATUITO</span>
-          <p>Até 3 tentativas de candidatura por dia.</p>
-          <button
-            className="quiet"
-            onClick={() => {
-              setToken("");
-              setData(null);
-            }}
-          >
+          <p>{data.user ? data.user.name : "Painel anterior"}</p>
+          <small>Cotas da hospedagem compartilhadas entre as contas.</small>
+          <button className="quiet" disabled={busy} onClick={logout}>
             Sair
           </button>
         </div>
       </aside>
       <main>
+        {recoveryCode && (
+          <section
+            className="recovery-card"
+            role="region"
+            aria-label="Código de recuperação"
+          >
+            <h2>Guarde seu código de recuperação</h2>
+            <p>
+              Ele permite criar uma nova senha se você perder o acesso. Salve em
+              um local seguro; este código é exibido apenas agora.
+            </p>
+            <code>{recoveryCode}</code>
+            <button className="secondary" onClick={() => setRecoveryCode("")}>
+              Já salvei meu código
+            </button>
+          </section>
+        )}
+        {data.user && !data.profile?.confirmed && (
+          <section className="welcome-flow">
+            <span className="eyebrow">VAMOS PREPARAR SUA BUSCA</span>
+            <h2>Olá, {data.user.name.split(" ")[0]}</h2>
+            <ol>
+              <li className={!data.profile ? "current" : "done"}>
+                1. Envie seu currículo
+              </li>
+              <li className={data.profile ? "current" : ""}>
+                2. Confirme seus dados
+              </li>
+              <li>3. Ajuste a busca e encontre vagas</li>
+            </ol>
+            {tab !== "profile" && (
+              <button onClick={() => setTab("profile")}>
+                Cadastrar currículo
+              </button>
+            )}
+          </section>
+        )}
         <header>
           <div>
             <span className="eyebrow">SEU PRÓXIMO PASSO</span>
@@ -558,7 +624,13 @@ function App() {
               )
             }
           >
-            <span>{busy ? "Processando…" : "Executar um lote"}</span>
+            <span>
+              {busy
+                ? "Processando…"
+                : data.user
+                  ? "Buscar vagas"
+                  : "Executar um lote"}
+            </span>
           </button>
         </header>
         {error && (
@@ -778,6 +850,14 @@ function App() {
         {["catalog", "recommended"].includes(tab) && (
           <JobCatalog key={tab} view={tab} api={api} revision={data} />
         )}
+        {tab === "account" && data.user && (
+          <AccountSettings
+            user={data.user}
+            api={api}
+            onRecovery={setRecoveryCode}
+            onLogout={logout}
+          />
+        )}
         {tab === "profile" && (
           <Profile data={data} api={api} act={act} busy={busy} />
         )}
@@ -801,7 +881,7 @@ function App() {
           </section>
         )}
         <footer>
-          <span>Job Autopilot · acesso privado</span>
+          <span>Job Autopilot · sua área pessoal</span>
           <span>
             {data.config.enabled
               ? "Coleta agendada ativa"
@@ -1340,7 +1420,9 @@ function Profile({ data, api, act, busy }) {
               checked={config.enabled}
               onChange={(e) => update("enabled", e.target.checked)}
             />
-            Executar a cada duas horas
+            {data.user
+              ? "Participar da busca automática"
+              : "Executar a cada duas horas"}
           </label>
           <label className="checkbox">
             <input
@@ -1354,6 +1436,13 @@ function Profile({ data, api, act, busy }) {
         </form>
         <div className="connections">
           <h3>Conexões</h3>
+          {data.user && !data.capabilities.email && (
+            <p className="footnote">
+              Envio automático por e-mail ainda não disponível para contas
+              individuais. Você pode acompanhar as vagas e abrir o anúncio para
+              se candidatar.
+            </p>
+          )}
           <p>
             IA{" "}
             <strong>{data.capabilities.ai ? "Configurada" : "Pendente"}</strong>

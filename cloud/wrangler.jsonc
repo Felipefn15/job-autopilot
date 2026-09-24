@@ -20,10 +20,14 @@
   ],
   "browser": { "binding": "BROWSER" },
   "durable_objects": {
-    "bindings": [{ "name": "LINKEDIN_CLOUD", "class_name": "LinkedInCloud" }],
+    "bindings": [
+      { "name": "LINKEDIN_CLOUD", "class_name": "LinkedInCloud" },
+      { "name": "USER_WORKSPACES", "class_name": "UserWorkspace" },
+    ],
   },
   "migrations": [
     { "tag": "v1-linkedin-cloud", "new_sqlite_classes": ["LinkedInCloud"] },
+    { "tag": "v2-user-workspaces", "new_sqlite_classes": ["UserWorkspace"] },
   ],
   "triggers": { "crons": ["17 */2 * * *"] },
   "vars": {
